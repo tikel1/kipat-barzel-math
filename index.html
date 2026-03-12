@@ -480,16 +480,16 @@ const BASE_SPEED   = 1.10;     // px/frame at 60fps, wave 1
 // Smoother difficulty curve
 const WAVE_CFG = [
   null,
-  { n:4,  ms:2400, spd:0.80, lvl:1, sim:1 },  // wave 1
-  { n:5,  ms:2100, spd:0.98, lvl:1, sim:1 },  // wave 2
-  { n:5,  ms:1900, spd:1.18, lvl:2, sim:2 },  // wave 3
-  { n:6,  ms:1700, spd:1.40, lvl:2, sim:2 },  // wave 4
-  { n:7,  ms:1550, spd:1.65, lvl:2, sim:2 },  // wave 5
-  { n:7,  ms:1900, spd:1.95, lvl:3, sim:3 },  // wave 6
-  { n:8,  ms:1600, spd:2.28, lvl:3, sim:3 },  // wave 7
-  { n:9,  ms:1350, spd:2.65, lvl:4, sim:3 },  // wave 8
-  { n:10, ms:1150, spd:3.05, lvl:4, sim:4 },  // wave 9
-  { n:11, ms:950,  spd:3.50, lvl:4, sim:4 },  // wave 10
+  { n:4,  ms:2400, spd:0.80, lvl:1 },  // wave 1
+  { n:5,  ms:2100, spd:0.98, lvl:1 },  // wave 2
+  { n:5,  ms:1900, spd:1.18, lvl:2 },  // wave 3
+  { n:6,  ms:1700, spd:1.40, lvl:2 },  // wave 4
+  { n:7,  ms:1550, spd:1.65, lvl:2 },  // wave 5
+  { n:7,  ms:1400, spd:1.95, lvl:3 },  // wave 6
+  { n:8,  ms:1250, spd:2.28, lvl:3 },  // wave 7
+  { n:9,  ms:1100, spd:2.65, lvl:4 },  // wave 8
+  { n:10, ms:950,  spd:3.05, lvl:4 },  // wave 9
+  { n:11, ms:800,  spd:3.50, lvl:4 },  // wave 10
 ];
 
 // ═══════════════════════════════════════════════════════════
@@ -786,7 +786,7 @@ function update(dt) {
 
   if (waveActive && (gameState === 'PLAYING' || gameState === 'QUESTION')) {
     const cfg = WAVE_CFG[wave];
-    if (spawned < totalMissiles && missiles.length < cfg.sim) {
+    if (spawned < totalMissiles && missiles.length < 3) {
       spawnTimer -= dt;
       if (spawnTimer <= 0) {
         missiles.push(mkMissile());
@@ -945,6 +945,12 @@ function onIntercepted(missile, ex, ey) {
   resolved++;
   updateHUD();
   promoteNextQuestioned();
+  // Immediately spawn next missile and reset timer
+  if (waveActive && spawned < totalMissiles && missiles.length < 3) {
+    missiles.push(mkMissile());
+    spawned++;
+    spawnTimer = WAVE_CFG[wave].ms;
+  }
 }
 
 function missileHit(missile) {
