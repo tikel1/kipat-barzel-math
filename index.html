@@ -524,6 +524,16 @@ const Q_TRIGGER_Y  = H * 0.22; // enemy missile y that shows question (high up =
 const SLOW_SPEED   = 0.28;     // px/frame while question is showing
 const BASE_SPEED   = 1.10;     // px/frame at 60fps, wave 1
 
+// Special missile types
+const SPECIAL_TYPES = {
+  double_score: { col: '#ffd700', shadow: '#b8860b', label: 'ניקוד כפול ל-20 שניות ★' },
+  extra_life:   { col: '#ff69b4', shadow: '#c01060', label: 'חיים נוספים ❤'           },
+  splitter:     { col: '#b44fff', shadow: '#5b2c6f', label: 'טיל מתפצל — יירט אותו! ⚡' },
+  freeze:       { col: '#00d4ff', shadow: '#0077aa', label: 'הקפאת טילים ל-12 שניות ❄' },
+  shield:       { col: '#d0d0e0', shadow: '#888899', label: 'מגן מפגיעה אחת 🛡'         },
+  hint:         { col: '#ff9900', shadow: '#994400', label: 'רמז — הסוללה הנכונה תהבהב 💡' },
+};
+
 // Infinite wave config — escalates smoothly over 40 waves then stays maxed
 function getWaveCfg(w) {
   const t = Math.min(w - 1, 39) / 39; // 0→1 over waves 1-40, then stable
@@ -571,6 +581,13 @@ let resolved        = 0;
 let spawnTimer      = 0;
 let waveActive      = false;
 let questionStartTime = 0; // for speed-based scoring
+
+// Special missile effects state
+let doubleScoreTimer = 0;   // ms remaining
+let freezeTimer      = 0;   // ms remaining
+let hintTimer        = 0;   // ms remaining
+let shieldActive     = false;
+let specialSpawnTimer = 25000; // ms until next special missile spawn
 
 let missiles        = [];
 let questionedMissile = null;
@@ -707,6 +724,36 @@ function mkMissile() {
   };
 }
 
+function mkSpecialMissile() {
+  const keys = Object.keys(SPECIAL_TYPES);
+  const type = keys[ri(0, keys.length - 1)];
+  const m = mkMissile();
+  m.special     = true;
+  m.specialType = type;
+  m.speed       = BASE_SPEED * getWaveCfg(wave).spd * 0.62; // slower = more time to intercept
+  return m;
+}
+
+function spawnMiniMissiles(ox, oy) {
+  // Spawn 3 fast mini missiles from splitter impact point
+  for (let i = 0; i < 3; i++) {
+    missiles.push({
+      id: midCtr++,
+      x: ox + (i - 1) * 28,
+      y: oy,
+      tx: ox + (i - 1) * 55 + ri(-20, 20),
+      speed: BASE_SPEED * getWaveCfg(wave).spd * 2.0,
+      trail: [],
+      active: true,
+      qTriggered: true, // mini missiles skip question
+      question: null,
+      wrongFires: 0,
+      mini: true,
+      special: false,
+    });
+  }
+}
+
 function mkInterceptor(tx, ty, target, correct, srcX) {
   const dx = target.x - tx, dy = target.y - ty;
   const dist = Math.hypot(dx, dy) || 1;
@@ -841,15 +888,29 @@ function update(dt) {
     if (t.flashT > 0) t.flashT -= dt;
   });
 
+  // Tick effect timers
+  if (doubleScoreTimer > 0) doubleScoreTimer -= dt;
+  if (freezeTimer      > 0) freezeTimer      -= dt;
+  if (hintTimer        > 0) hintTimer         -= dt;
+
   if (waveActive && (gameState === 'PLAYING' || gameState === 'QUESTION')) {
     const cfg = getWaveCfg(wave);
-    if (spawned < totalMissiles && missiles.length < 3) {
+    // Regular missile spawn (only count non-special, non-mini missiles)
+    const regularCount = missiles.filter(m => !m.mini && !m.special).length;
+    if (spawned < totalMissiles && regularCount < 3) {
       spawnTimer -= dt;
       if (spawnTimer <= 0) {
         missiles.push(mkMissile());
         spawned++;
         spawnTimer = cfg.ms;
       }
+    }
+    // Special missile spawn (independent of wave count)
+    specialSpawnTimer -= dt;
+    if (specialSpawnTimer <= 0) {
+      const hasSpecial = missiles.some(m => m.special);
+      if (!hasSpecial) missiles.push(mkSpecialMissile());
+      specialSpawnTimer = ri(22000, 42000);
     }
   }
 
@@ -865,11 +926,13 @@ function update(dt) {
   floatTexts.forEach(f => { f.y += f.vy * (dt/16.67); f.alpha -= 0.017*(dt/16.67); });
   floatTexts = floatTexts.filter(f => f.alpha > 0);
 
-  // Show missile alert when screen is empty but more missiles are coming
-  const showAlert = waveActive && missiles.length === 0 && spawned < totalMissiles && gameState !== 'PAUSED';
+  // Show missile alert only for regular missiles
+  const regularMissiles = missiles.filter(m => !m.mini && !m.special);
+  const showAlert = waveActive && regularMissiles.length === 0 && spawned < totalMissiles && gameState !== 'PAUSED';
   document.getElementById('missile-alert').classList.toggle('visible', showAlert);
 
-  if (waveActive && spawned === totalMissiles && resolved === totalMissiles && missiles.length === 0) {
+  // Wave complete: only count regular missiles
+  if (waveActive && spawned === totalMissiles && resolved === totalMissiles && regularMissiles.length === 0) {
     waveActive = false;
     onWaveComplete();
   }
@@ -877,8 +940,9 @@ function update(dt) {
 
 function updateMissile(m, dt) {
   const isQ = (m === questionedMissile);
+  const freezeMult = (freezeTimer > 0 && !m.mini) ? 0.45 : 1;
   // Non-questioned missiles slow to 68% when a question is active — gives player time to answer
-  const spd = isQ ? SLOW_SPEED : (gameState === 'QUESTION' ? m.speed * 0.68 : m.speed);
+  const spd = (isQ ? SLOW_SPEED : (gameState === 'QUESTION' ? m.speed * 0.68 : m.speed)) * freezeMult;
   const dx = m.tx - m.x;
   const dy = GROUND_Y - m.y;
   const dist = Math.hypot(dx, dy) || 1;
@@ -1001,6 +1065,32 @@ function fireTruck(truck) {
 }
 
 function onIntercepted(missile, ex, ey, truckX) {
+  const lx = truckX ?? ex;
+
+  // ── Special missile intercepted ──
+  if (missile.special) {
+    let pts = 200 + Math.min(wave * 8, 150);
+    if (doubleScoreTimer > 0) pts *= 2;
+    score += pts;
+    const st = SPECIAL_TYPES[missile.specialType];
+    addFloat(`+${pts}`, ex, ey - 10, st.col);
+    applySpecialEffect(missile.specialType, lx);
+    updateHUD();
+    promoteNextQuestioned();
+    return;
+  }
+
+  // ── Mini missile intercepted (shouldn't happen normally but handle it) ──
+  if (missile.mini) {
+    let pts = 60;
+    if (doubleScoreTimer > 0) pts *= 2;
+    score += pts;
+    addFloat(`+${pts}`, ex, ey - 10, '#88ffff');
+    updateHUD();
+    return;
+  }
+
+  // ── Regular missile intercepted ──
   const elapsed = (performance.now() - questionStartTime) / 1000;
   let speedLabel, speedBonus, labelCol;
   if (elapsed < 2.5) {
@@ -1012,16 +1102,17 @@ function onIntercepted(missile, ex, ey, truckX) {
   }
   const ftBonus = missile.wrongFires === 0 ? 50 : 0;
   const wvBonus = Math.min(wave * 8, 200);
-  const pts = speedBonus + ftBonus + wvBonus;
+  let pts = speedBonus + ftBonus + wvBonus;
+  if (doubleScoreTimer > 0) pts *= 2;
   score += pts;
-  addFloat(`+${pts}`, ex, ey - 10, labelCol);          // score pops near explosion
-  const lx = truckX ?? ex;
-  addFloat(speedLabel, lx, TRUCK_Y - 72, labelCol);    // quality label above the battery
+  addFloat(`+${pts}`, ex, ey - 10, doubleScoreTimer > 0 ? '#ffd700' : labelCol);
+  addFloat(speedLabel, lx, TRUCK_Y - 72, labelCol);
   resolved++;
   updateHUD();
   promoteNextQuestioned();
-  // Immediately spawn next missile and reset timer
-  if (waveActive && spawned < totalMissiles && missiles.length < 3) {
+  // Immediately spawn next missile
+  const regularCount = missiles.filter(m => !m.mini && !m.special).length;
+  if (waveActive && spawned < totalMissiles && regularCount < 3) {
     missiles.push(mkMissile());
     spawned++;
     spawnTimer = getWaveCfg(wave).ms;
@@ -1029,20 +1120,96 @@ function onIntercepted(missile, ex, ey, truckX) {
   if (window.hj) hj('event', `intercept_${elapsed < 2.5 ? 'fast' : elapsed < 6 ? 'good' : 'last'}`);
 }
 
+function applySpecialEffect(type, lx) {
+  switch (type) {
+    case 'double_score':
+      doubleScoreTimer = 20000;
+      addFloat('★ ניקוד כפול פעיל!', W / 2, H * 0.38, '#ffd700');
+      break;
+    case 'extra_life':
+      lives = Math.min(lives + 1, 6);
+      updateHUD();
+      addFloat('❤ +1 חיים!', lx, TRUCK_Y - 72, '#ff69b4');
+      break;
+    case 'splitter':
+      // Bonus for correctly intercepting the splitter — no split!
+      addFloat('⚡ יירוט מוצלח!', lx, TRUCK_Y - 72, '#b44fff');
+      break;
+    case 'freeze':
+      freezeTimer = 12000;
+      addFloat('❄ הקפאה!', W / 2, H * 0.38, '#00d4ff');
+      break;
+    case 'shield':
+      shieldActive = true;
+      addFloat('🛡 מגן פעיל!', lx, TRUCK_Y - 72, '#d0d0e0');
+      break;
+    case 'hint':
+      hintTimer = 6000;
+      addFloat('💡 רמז פעיל!', lx, TRUCK_Y - 72, '#ff9900');
+      break;
+  }
+}
+
 function missileHit(missile) {
   missile.active = false;
   const wasQuestioned = (missile === questionedMissile);
+
+  // ── Mini missile hits city ──
+  if (missile.mini) {
+    explosions.push(mkExplosion(missile.x, GROUND_Y - 18, false));
+    beep('hit');
+    if (shieldActive) {
+      shieldActive = false;
+      addFloat('🛡 חסום!', missile.x, GROUND_Y - 55, '#d0d0e0');
+    } else {
+      lives--;
+      damageFlash = 500;
+    }
+    updateHUD();
+    if (lives <= 0) { waveActive = false; setTimeout(() => endGame(false), 800); }
+    return;
+  }
+
+  // ── Splitter missile hits city — splits into 3 minis ──
+  if (missile.special && missile.specialType === 'splitter') {
+    explosions.push(mkExplosion(missile.x, GROUND_Y - 18, true));
+    beep('hit');
+    spawnMiniMissiles(missile.x, missile.y);
+    if (wasQuestioned) promoteNextQuestioned();
+    return; // no direct life loss — minis will cause damage
+  }
+
+  // ── Other special hits city — treat like regular miss ──
+  if (missile.special) {
+    explosions.push(mkExplosion(missile.x, GROUND_Y - 18, true));
+    beep('hit');
+    if (shieldActive) {
+      shieldActive = false;
+      addFloat('🛡 חסום!', missile.x, GROUND_Y - 55, '#d0d0e0');
+    } else {
+      lives--;
+      damageFlash = 700;
+    }
+    updateHUD();
+    if (wasQuestioned) promoteNextQuestioned();
+    if (lives <= 0) { waveActive = false; setTimeout(() => endGame(false), 800); }
+    return;
+  }
+
+  // ── Regular missile hits city ──
   resolved++;
-  lives--;
-  damageFlash = 700;
   explosions.push(mkExplosion(missile.x, GROUND_Y - 18, true));
   beep('hit');
+  if (shieldActive) {
+    shieldActive = false;
+    addFloat('🛡 חסום!', missile.x, GROUND_Y - 55, '#d0d0e0');
+  } else {
+    lives--;
+    damageFlash = 700;
+  }
   updateHUD();
   if (wasQuestioned) promoteNextQuestioned();
-  if (lives <= 0) {
-    waveActive = false;
-    setTimeout(() => endGame(false), 800);
-  }
+  if (lives <= 0) { waveActive = false; setTimeout(() => endGame(false), 800); }
 }
 
 function onWaveComplete() {
@@ -1073,6 +1240,7 @@ function startWave() {
   spawned = 0;
   resolved = 0;
   spawnTimer = 900;
+  specialSpawnTimer = ri(18000, 35000); // reset special timer each wave
   missiles = [];
   questionedMissile = null;
   interceptors = interceptors.filter(ic => ic.active);
@@ -1087,6 +1255,8 @@ function startNewGame() {
   missiles = []; interceptors = []; explosions = []; floatTexts = [];
   questionedMissile = null;
   damageFlash = 0; hoveredTruck = null;
+  doubleScoreTimer = 0; freezeTimer = 0; hintTimer = 0; shieldActive = false;
+  specialSpawnTimer = ri(18000, 30000);
   if (window.hj) hj('event', `game_start_diff${minMathLvl}`);
   if (gameState === 'PAUSED') {
     document.getElementById('pause-overlay').classList.add('hidden');
@@ -1126,6 +1296,7 @@ function draw(dt) {
   interceptors.forEach(drawInterceptor);
   explosions.forEach(drawExplosion);
   drawFloats();
+  drawEffects();
   if (damageFlash > 0) {
     ctx.fillStyle = `rgba(210,20,20,${Math.min(0.45, (damageFlash/700)*0.45)})`;
     ctx.fillRect(0, 0, W, H);
@@ -1177,6 +1348,40 @@ function drawClouds(dt) {
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
   ctx.restore();
+}
+
+function drawEffects() {
+  const now = performance.now();
+  const indicators = [];
+  if (doubleScoreTimer > 0) indicators.push({ icon: '★', label: 'ניקוד ×2', col: '#ffd700', t: doubleScoreTimer / 20000 });
+  if (freezeTimer      > 0) indicators.push({ icon: '❄', label: 'הקפאה',    col: '#00d4ff', t: freezeTimer / 12000 });
+  if (shieldActive)          indicators.push({ icon: '🛡', label: 'מגן',      col: '#d0d0e0', t: 1 });
+  if (hintTimer        > 0) indicators.push({ icon: '💡', label: 'רמז',      col: '#ff9900', t: hintTimer / 6000 });
+  if (!indicators.length) return;
+
+  const barW = 72, barH = 15, pad = 6;
+  indicators.forEach((ind, i) => {
+    const x = W - barW - 10;
+    const y = 62 + i * (barH + pad);
+    const pulse = 0.75 + 0.25 * Math.sin(now * 0.004 + i * 1.4);
+    // background
+    ctx.globalAlpha = 0.82;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.roundRect(x, y, barW, barH, 4); ctx.fill();
+    // progress bar
+    ctx.fillStyle = ind.col;
+    ctx.globalAlpha = 0.28;
+    ctx.beginPath(); ctx.roundRect(x, y, barW * ind.t, barH, 4); ctx.fill();
+    // text
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = ind.col;
+    ctx.font = `bold 10px Rubik, Arial`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${ind.icon} ${ind.label}`, x + barW - 4, y + barH / 2);
+  });
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
 }
 
 function drawGround() {
@@ -1345,6 +1550,18 @@ function drawTruck(t) {
     ctx.fill(); ctx.stroke();
   }
 
+  // ── Hint glow (💡 effect active + this is the correct battery) ──
+  if (hintTimer > 0 && t.correct && gameState === 'QUESTION') {
+    const p = 0.45 + 0.55 * Math.sin(performance.now() * 0.009);
+    ctx.strokeStyle = `rgba(255,153,0,${p})`;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = '#ff9900';
+    ctx.shadowBlur = 28 * p;
+    rRect(ctx, -58, -48, 118, 80, 7);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
   // ── Hover selection outline ──
   if (hovered) {
     ctx.strokeStyle = 'rgba(46,196,182,0.8)';
@@ -1360,6 +1577,34 @@ function drawTruck(t) {
 
 function drawMissile(m, isQuestioned) {
   const now = performance.now();
+  const stype = m.special ? SPECIAL_TYPES[m.specialType] : null;
+  const mScale = m.mini ? 0.55 : 1;
+
+  // ── Special missile glow ring ──
+  if (m.special) {
+    const pulse = 0.5 + 0.5 * Math.sin(now * 0.005);
+    ctx.save();
+    ctx.globalAlpha = pulse * 0.65;
+    ctx.strokeStyle = stype.col;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = stype.col;
+    ctx.shadowBlur = 22;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, 28 + 5 * Math.sin(now * 0.004), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    // Bonus label above special missile
+    ctx.save();
+    ctx.font = 'bold 10px Rubik, Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = stype.col;
+    ctx.shadowColor = stype.shadow;
+    ctx.shadowBlur = 8;
+    ctx.fillText(stype.label.split(' ').slice(-1)[0], m.x, m.y - 32); // last word = icon
+    ctx.restore();
+  }
 
   if (isQuestioned) {
     const pulse = 0.55 + 0.45 * Math.sin(now * 0.006);
@@ -1390,22 +1635,26 @@ function drawMissile(m, isQuestioned) {
   const ang = Math.atan2(m.tx - m.x, m.y - GROUND_Y);
   ctx.save();
   ctx.translate(m.x, m.y);
+  ctx.scale(mScale, mScale);
   ctx.rotate(ang);
 
-  if (isQuestioned) {
-    ctx.shadowColor = '#ff6600';
-    ctx.shadowBlur = 14;
-  }
+  // Color scheme: special uses type color, mini uses purple, normal uses red
+  const bodyCol = m.special ? stype.col : (m.mini ? '#9b59b6' : (isQuestioned ? '#e84000' : '#7a0010'));
+  const noseCol = m.special ? '#fff'     : (m.mini ? '#cbf3f0' : (isQuestioned ? '#ff5500' : '#a00018'));
+  const finCol  = m.special ? stype.shadow:(m.mini ? '#5b2c6f': (isQuestioned ? '#cc3300' : '#5a000c'));
 
-  ctx.fillStyle = isQuestioned ? '#e84000' : '#7a0010';
+  if (isQuestioned && !m.special) { ctx.shadowColor = '#ff6600'; ctx.shadowBlur = 14; }
+  if (m.special) { ctx.shadowColor = stype.shadow; ctx.shadowBlur = 18; }
+
+  ctx.fillStyle = bodyCol;
   rRect(ctx, -5, -14, 10, 24, 2); ctx.fill();
 
-  ctx.fillStyle = isQuestioned ? '#ff5500' : '#a00018';
+  ctx.fillStyle = noseCol;
   ctx.beginPath();
   ctx.moveTo(0,-23); ctx.lineTo(-5,-14); ctx.lineTo(5,-14);
   ctx.closePath(); ctx.fill();
 
-  ctx.fillStyle = isQuestioned ? '#cc3300' : '#5a000c';
+  ctx.fillStyle = finCol;
   [-1, 1].forEach(dx => {
     ctx.beginPath();
     ctx.moveTo(dx*5, 9); ctx.lineTo(dx*13, 18); ctx.lineTo(dx*5, 13);
@@ -1491,10 +1740,24 @@ function drawFloats() {
 function showQ(text) {
   questionStartTime = performance.now();
   document.getElementById('question-text').textContent = text;
+  const hint = document.getElementById('question-hint');
+  if (questionedMissile?.special) {
+    const st = SPECIAL_TYPES[questionedMissile.specialType];
+    hint.textContent = `יירט לקבל: ${st.label}`;
+    hint.style.color = st.col;
+    hint.style.fontWeight = '700';
+  } else {
+    hint.textContent = 'לחץ על הסוללה עם התשובה הנכונה';
+    hint.style.color = '';
+    hint.style.fontWeight = '';
+  }
   document.getElementById('question-display').classList.add('visible');
 }
 function hideQ() {
   document.getElementById('question-display').classList.remove('visible');
+  const hint = document.getElementById('question-hint');
+  hint.style.color = '';
+  hint.style.fontWeight = '';
 }
 
 let missTimer = null;
