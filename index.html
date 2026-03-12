@@ -371,6 +371,45 @@
     }
     .level-btn.active small { color: #2ec4b6; }
 
+    /* Splash screen */
+    #splash {
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background:
+        linear-gradient(to bottom, rgba(2,3,20,0.25) 0%, rgba(2,3,20,0.55) 55%, rgba(2,3,20,1) 100%),
+        url('./bg-city.png') center top / cover no-repeat;
+      transition: opacity 0.7s ease;
+    }
+    #splash.fade-out { opacity: 0; pointer-events: none; }
+    #splash-logo {
+      width: clamp(260px, 72%, 380px);
+      mix-blend-mode: screen;
+      opacity: 0;
+      transform: scale(0.72);
+      animation: splashLogoIn 0.9s cubic-bezier(0.22, 0.9, 0.36, 1) 0.3s forwards;
+    }
+    @keyframes splashLogoIn {
+      to { opacity: 1; transform: scale(1); }
+    }
+    #splash-glow {
+      position: absolute;
+      width: clamp(260px, 72%, 380px);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(46,196,182,0.18) 0%, transparent 70%);
+      animation: splashGlowPulse 1.4s ease-in-out 0.9s infinite alternate;
+      pointer-events: none;
+    }
+    @keyframes splashGlowPulse {
+      from { opacity: 0.4; transform: scale(0.9); }
+      to   { opacity: 1.0; transform: scale(1.1); }
+    }
+
     .btn-primary {
       padding: 14px 44px;
       border-radius: 12px;
@@ -392,6 +431,10 @@
   </style>
 </head>
 <body>
+<div id="splash">
+  <div id="splash-glow"></div>
+  <img id="splash-logo" src="./logo.png" alt="כיפת ברזל">
+</div>
 
 <div id="game-container">
   <canvas id="gameCanvas" width="480" height="720"></canvas>
@@ -1617,6 +1660,13 @@ initTrucks();
 updateHUD();
 showScreen('start');
 requestAnimationFrame(loop);
+
+// Splash dismiss
+const splash = document.getElementById('splash');
+setTimeout(() => {
+  splash.classList.add('fade-out');
+  setTimeout(() => splash.remove(), 750);
+}, 2200);
 </script>
 </body>
 </html>
