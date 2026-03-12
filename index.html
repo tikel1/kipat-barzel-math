@@ -4,17 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>כיפת ברזל: עושים חשבון עם איראן</title>
-  <!-- Hotjar Tracking Code for Kipat Barzel -->
-  <script>
-      (function(h,o,t,j,a,r){
-          h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};
-          h._hjSettings={hjid:6667449,hjsv:6};
-          a=o.getElementsByTagName('head')[0];
-          r=o.createElement('script');r.async=1;
-          r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;
-          a.appendChild(r);
-      })(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');
-  </script>  
   <meta property="og:title" content="כיפת ברזל: עושים חשבון עם איראן">
   <meta property="og:description" content="משחק מתמטיקה אינטראקטיבי — הגן על גבעתיים עם כיפת ברזל! פתרו שאלות כדי לירות טילים.">
   <meta property="og:image" content="https://tikel1.github.io/kipat-barzel-math/logo.png">
@@ -468,16 +457,16 @@
         <div class="diff-label">בחרו רמת קושי</div>
         <div class="level-grid">
           <button class="level-btn active" data-level="1">
-            מתחיל<small>חיבור וחיסור עד 50</small>
+            🟢 מתחיל<small>חיבור וחיסור עד 50</small>
           </button>
           <button class="level-btn" data-level="2">
-            מתקדם<small>חיבור וחיסור עד 200</small>
+            📚 מתקדם<small>חיבור וחיסור עד 200</small>
           </button>
           <button class="level-btn" data-level="3">
-            קשה<small>כפל וחילוק 1–10</small>
+            🔥 קשה<small>כפל וחילוק 1–10</small>
           </button>
           <button class="level-btn" data-level="4">
-            טירוף<small>כפל וחילוק 1–50</small>
+            💥 טירוף<small>כפל וחילוק 1–50</small>
           </button>
         </div>
       </div>
@@ -626,11 +615,15 @@ function genQuestion(lvl) {
       op = '÷';
     }
   } else {
-    // טירוף: כפל וחילוק 1-50
+    // טירוף: כפל וחילוק — מספרים 1-50, תשובה ≤ 999
     if (Math.random() < 0.5) {
-      op = '×'; a = ri(2,50); b = ri(2,50); ans = a*b;
+      op = '×';
+      // Retry until product ≤ 999 (keeps operands in 1-50 range)
+      do { a = ri(2,50); b = ri(2,50); } while (a * b > 999);
+      ans = a * b;
     } else {
-      ans = ri(1,50); b = ri(2,50); a = ans*b;
+      // ÷: pick quotient and divisor so dividend (a) ≤ 999
+      ans = ri(2,30); b = ri(2,30); a = ans * b;
       op = '÷';
     }
   }
@@ -697,7 +690,7 @@ function mkMissile() {
   };
 }
 
-function mkInterceptor(tx, ty, target, correct) {
+function mkInterceptor(tx, ty, target, correct, srcX) {
   const dx = target.x - tx, dy = target.y - ty;
   const dist = Math.hypot(dx, dy) || 1;
   const spd = 7.5;
@@ -709,6 +702,7 @@ function mkInterceptor(tx, ty, target, correct) {
     active: true,
     correct,
     target,
+    srcX: srcX ?? tx, // source truck x — for showing label above correct battery
     deflectT: 0,
     deflectDir: Math.random() > 0.5 ? 1 : -1,
   };
@@ -928,7 +922,7 @@ function updateInterceptor(ic, dt) {
       const ex = ic.x, ey = ic.y;
       explosions.push(mkExplosion(ex, ey, true));
       beep('boom');
-      onIntercepted(ic.target, ex, ey);
+      onIntercepted(ic.target, ex, ey, ic.srcX);
       ic.active = false;
       return;
     }
@@ -974,7 +968,7 @@ function fireTruck(truck) {
   if (truck.correct) {
     // Correct answer — free shot, no ammo cost
     beep('correct');
-    const ic = mkInterceptor(truck.x, truck.y, questionedMissile, true);
+    const ic = mkInterceptor(truck.x, truck.y, questionedMissile, true, truck.x);
     interceptors.push(ic);
   } else {
     // Wrong answer — costs 1 ammo; if empty, no shot
@@ -989,7 +983,7 @@ function fireTruck(truck) {
   }
 }
 
-function onIntercepted(missile, ex, ey) {
+function onIntercepted(missile, ex, ey, truckX) {
   const elapsed = (performance.now() - questionStartTime) / 1000;
   let speedLabel, speedBonus, labelCol;
   if (elapsed < 2.5) {
@@ -1003,8 +997,9 @@ function onIntercepted(missile, ex, ey) {
   const wvBonus = Math.min(wave * 8, 200);
   const pts = speedBonus + ftBonus + wvBonus;
   score += pts;
-  addFloat(`+${pts}`, ex, ey - 10, labelCol);
-  addFloat(speedLabel, ex, ey - 38, labelCol);
+  addFloat(`+${pts}`, ex, ey - 10, labelCol);          // score pops near explosion
+  const lx = truckX ?? ex;
+  addFloat(speedLabel, lx, TRUCK_Y - 72, labelCol);    // quality label above the battery
   resolved++;
   updateHUD();
   promoteNextQuestioned();
