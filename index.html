@@ -249,30 +249,43 @@
       background:
         linear-gradient(to bottom, rgba(2,3,20,0.35) 0%, rgba(2,3,20,0.72) 50%, rgba(2,3,20,0.97) 100%),
         url('./bg-city.png') center top / cover no-repeat;
-      justify-content: flex-end;
-      padding-top: 0;
-      padding-bottom: 22px;
-      gap: 10px;
-    }
-    #screen-start > p {
-      font-size: 1.0rem;
-      color: #dde;
-      max-width: 320px;
-      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
-    }
-    #screen-start .diff-label {
-      color: #9ab;
-      font-size: 0.75rem;
+      justify-content: space-between;
+      padding-top: 150px;
+      padding-bottom: 24px;
+      gap: 0;
     }
     #game-logo {
-      width: 310px;
-      max-width: 90%;
+      width: clamp(260px, 72%, 360px);
       position: absolute;
-      top: 10px;
+      top: 8px;
       left: 50%;
       transform: translateX(-50%);
       pointer-events: none;
       mix-blend-mode: screen;
+    }
+    .start-mid {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      width: 100%;
+    }
+    #screen-start p {
+      font-size: clamp(0.95rem, 3.5vw, 1.15rem);
+      color: #dde;
+      max-width: 320px;
+      text-align: center;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+      line-height: 1.55;
+    }
+    #screen-start .diff-label {
+      color: #c8dde8;
+      font-size: clamp(0.85rem, 3vw, 1.05rem);
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.7);
     }
     .screen.hidden { display: none; }
     .screen h1 {
@@ -305,17 +318,17 @@
     .level-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
+      gap: 10px;
       width: 100%;
-      max-width: 305px;
+      max-width: 320px;
     }
     .level-btn {
-      padding: 11px 8px;
+      padding: 13px 10px;
       border-radius: 10px;
       border: 1.5px solid #162030;
       background: #05101a;
-      color: #778;
-      font-size: 0.87rem;
+      color: #889;
+      font-size: clamp(0.88rem, 3vw, 1.0rem);
       font-weight: 600;
       cursor: pointer;
       text-align: center;
@@ -409,21 +422,23 @@
     <!-- Start screen -->
     <div class="screen" id="screen-start">
       <img id="game-logo" src="./logo.png" alt="כיפת ברזל: עושים חשבון עם איראן">
-      <p>טיל מתקרב! פתרו את שאלת המתמטיקה ולחצו על הסוללה עם התשובה הנכונה כדי ליירט אותו.</p>
-      <div class="diff-label">בחרו רמת קושי</div>
-      <div class="level-grid">
-        <button class="level-btn active" data-level="1">
-          חיבור וחיסור<small>מספרים עד 20</small>
-        </button>
-        <button class="level-btn" data-level="2">
-          חיבור וחיסור<small>מספרים עד 100</small>
-        </button>
-        <button class="level-btn" data-level="3">
-          כפל<small>לוח הכפל 2–5</small>
-        </button>
-        <button class="level-btn" data-level="4">
-          כפל<small>לוח הכפל 6–10</small>
-        </button>
+      <div class="start-mid">
+        <p>טיל מתקרב! פתרו את שאלת המתמטיקה ולחצו על הסוללה עם התשובה הנכונה כדי ליירט אותו.</p>
+        <div class="diff-label">בחרו רמת קושי</div>
+        <div class="level-grid">
+          <button class="level-btn active" data-level="1">
+            חיבור וחיסור<small>מספרים עד 20</small>
+          </button>
+          <button class="level-btn" data-level="2">
+            חיבור וחיסור<small>מספרים עד 100</small>
+          </button>
+          <button class="level-btn" data-level="3">
+            כפל<small>לוח הכפל 2–5</small>
+          </button>
+          <button class="level-btn" data-level="4">
+            כפל<small>לוח הכפל 6–10</small>
+          </button>
+        </div>
       </div>
       <button class="btn-primary" id="btn-start">▶  התחל משחק</button>
     </div>
