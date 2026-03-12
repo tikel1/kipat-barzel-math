@@ -910,7 +910,7 @@ function update(dt) {
     if (specialSpawnTimer <= 0) {
       const hasSpecial = missiles.some(m => m.special);
       if (!hasSpecial) missiles.push(mkSpecialMissile());
-      specialSpawnTimer = ri(22000, 42000);
+      specialSpawnTimer = ri(14000, 26000); // next special in 14-26 seconds
     }
   }
 
@@ -1047,7 +1047,8 @@ function fireTruck(truck) {
   explosions.push(mkExplosion(truck.x, truck.y - 25, false));
 
   if (truck.correct) {
-    // Correct answer — free shot, no ammo cost
+    if (truck.stock <= 0) return;
+    truck.stock--;
     beep('correct');
     const ic = mkInterceptor(truck.x, truck.y, questionedMissile, true, truck.x);
     interceptors.push(ic);
@@ -1240,7 +1241,7 @@ function startWave() {
   spawned = 0;
   resolved = 0;
   spawnTimer = 900;
-  specialSpawnTimer = ri(18000, 35000); // reset special timer each wave
+  // Don't reset specialSpawnTimer here — it carries over between waves
   missiles = [];
   questionedMissile = null;
   interceptors = interceptors.filter(ic => ic.active);
@@ -1256,7 +1257,7 @@ function startNewGame() {
   questionedMissile = null;
   damageFlash = 0; hoveredTruck = null;
   doubleScoreTimer = 0; freezeTimer = 0; hintTimer = 0; shieldActive = false;
-  specialSpawnTimer = ri(18000, 30000);
+  specialSpawnTimer = ri(9000, 15000); // first special missile within 9-15 seconds
   if (window.hj) hj('event', `game_start_diff${minMathLvl}`);
   if (gameState === 'PAUSED') {
     document.getElementById('pause-overlay').classList.add('hidden');
