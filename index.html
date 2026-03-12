@@ -550,11 +550,10 @@ const Q_TRIGGER_Y  = H * 0.22; // enemy missile y that shows question (high up =
 const SLOW_SPEED   = 0.28;     // px/frame while question is showing
 const BASE_SPEED   = 1.10;     // px/frame at 60fps, wave 1
 
-// Special missile types
+// Special missile types (random specials — splitter is separate, wave-based)
 const SPECIAL_TYPES = {
   double_score: { col: '#ffd700', shadow: '#b8860b', label: 'ניקוד כפול ל-20 שניות ★' },
   extra_life:   { col: '#ff69b4', shadow: '#c01060', label: 'חיים נוספים ❤'           },
-  splitter:     { col: '#ff5500', shadow: '#cc1100', label: 'טיל שמן — אם תחטיא יתפצל לשניים! 🔥' },
   freeze:       { col: '#00d4ff', shadow: '#0077aa', label: 'הקפאת טילים ל-12 שניות ❄' },
   shield:       { col: '#d0d0e0', shadow: '#888899', label: 'מגן מפגיעה אחת 🛡'         },
   hint:         { col: '#ff9900', shadow: '#994400', label: 'רמז — הסוללה הנכונה תהבהב 💡' },
@@ -614,6 +613,7 @@ let freezeTimer      = 0;   // ms remaining
 let hintTimer        = 0;   // ms remaining
 let shieldActive     = false;
 let specialSpawnTimer = 25000; // ms until next special missile spawn
+let waveHasSplitter   = false; // whether the current wave ends with the fat splitter
 
 let missiles        = [];
 let questionedMissile = null;
@@ -756,20 +756,27 @@ function mkSpecialMissile() {
   const m = mkMissile();
   m.special     = true;
   m.specialType = type;
-  // Splitter is extra slow (fat missile); others are moderately slower
-  m.speed       = BASE_SPEED * getWaveCfg(wave).spd * (type === 'splitter' ? 0.38 : 0.62);
+  m.speed       = BASE_SPEED * getWaveCfg(wave).spd * 0.62; // slower = more time to intercept
   return m;
 }
 
-function spawnSplitMissiles(ox) {
-  // Spawn 2 regular missiles from top after splitter splits — counted in wave total
+// Fat splitter missile — spawns as the last missile in each wave
+function mkSplitter() {
+  const m = mkMissile();
+  m.splitter = true;
+  m.speed    = BASE_SPEED * getWaveCfg(wave).spd * 0.42; // extra slow and menacing
+  return m;
+}
+
+// Spawn 2 regular missiles from the intercept point — counted in the wave total
+function spawnSplitMissiles(ox, oy) {
   for (let i = 0; i < 2; i++) {
     missiles.push({
       id: midCtr++,
-      x: ox + (i === 0 ? -50 : 50),
-      y: -30,
+      x:  ox + (i === 0 ? -35 : 35),
+      y:  oy,
       tx: ri(65, W - 65),
-      speed: BASE_SPEED * getWaveCfg(wave).spd * 1.35,
+      speed: BASE_SPEED * getWaveCfg(wave).spd * 1.4,
       trail: [],
       active: true,
       qTriggered: false,
@@ -778,7 +785,7 @@ function spawnSplitMissiles(ox) {
     });
   }
   totalMissiles += 2;
-  spawned      += 2;
+  spawned       += 2;
 }
 
 function mkInterceptor(tx, ty, target, correct, srcX) {
@@ -922,12 +929,13 @@ function update(dt) {
 
   if (waveActive && (gameState === 'PLAYING' || gameState === 'QUESTION')) {
     const cfg = getWaveCfg(wave);
-    // Regular missile spawn (only count non-special, non-mini missiles)
-    const regularCount = missiles.filter(m => !m.mini && !m.special).length;
+    // Regular missile spawn — last missile of each wave is always the fat splitter
+    const regularCount = missiles.filter(m => !m.mini && !m.special && !m.splitter).length;
     if (spawned < totalMissiles && regularCount < 3) {
       spawnTimer -= dt;
       if (spawnTimer <= 0) {
-        missiles.push(mkMissile());
+        const isLast = waveHasSplitter && (spawned === totalMissiles - 1);
+        missiles.push(isLast ? mkSplitter() : mkMissile());
         spawned++;
         spawnTimer = cfg.ms;
       }
@@ -1096,7 +1104,21 @@ function fireTruck(truck) {
 function onIntercepted(missile, ex, ey, truckX) {
   const lx = truckX ?? ex;
 
-  // ── Special missile intercepted ──
+  // ── Splitter missile intercepted → split into 2 regular missiles ──
+  if (missile.splitter) {
+    let pts = 200 + Math.min(wave * 8, 150);
+    if (doubleScoreTimer > 0) pts *= 2;
+    score += pts;
+    addFloat(`+${pts}`, ex, ey - 10, '#ff5500');
+    showPowerBanner('🔥 הטיל השמן מתפצל! יירט את השניים!', '#ff5500');
+    resolved++;
+    spawnSplitMissiles(ex, ey);
+    updateHUD();
+    promoteNextQuestioned();
+    return;
+  }
+
+  // ── Other special missile intercepted ──
   if (missile.special) {
     let pts = 200 + Math.min(wave * 8, 150);
     if (doubleScoreTimer > 0) pts *= 2;
@@ -1162,11 +1184,6 @@ function applySpecialEffect(type, lx) {
       addFloat('❤ +1 חיים!', lx, TRUCK_Y - 72, '#ff69b4');
       showPowerBanner('❤ קיבלת חיים נוספים!', '#ff69b4');
       break;
-    case 'splitter':
-      // Correctly intercepted splitter — bonus, no split
-      addFloat('🔥 יירוט מוצלח!', lx, TRUCK_Y - 72, '#ff5500');
-      showPowerBanner('🔥 יירטת את הטיל השמן! כל הכבוד!', '#ff5500');
-      break;
     case 'freeze':
       freezeTimer = 12000;
       addFloat('❄ הקפאה!', W / 2, H * 0.38, '#00d4ff');
@@ -1205,25 +1222,8 @@ function missileHit(missile) {
     return;
   }
 
-  // ── Splitter missile hits city — lose life + spawn 2 regular missiles ──
-  if (missile.special && missile.specialType === 'splitter') {
-    explosions.push(mkExplosion(missile.x, GROUND_Y - 18, true));
-    beep('hit');
-    if (shieldActive) {
-      shieldActive = false;
-      addFloat('🛡 חסום! אבל מתפצל!', missile.x, GROUND_Y - 55, '#d0d0e0');
-    } else {
-      lives--;
-      damageFlash = 700;
-      addFloat('💥 מתפצל!', missile.x, GROUND_Y - 55, '#ff5500');
-    }
-    updateHUD();
-    showPowerBanner('🔥 הטיל השמן מתפצל! שני טילים חדשים בדרך!', '#ff5500');
-    spawnSplitMissiles(missile.x);
-    if (wasQuestioned) promoteNextQuestioned();
-    if (lives <= 0) { waveActive = false; setTimeout(() => endGame(false), 800); }
-    return;
-  }
+  // ── Splitter hits city — treat like a regular missile miss (no split on miss) ──
+  // falls through to the regular missile block below
 
   // ── Other special hits city — treat like regular miss ──
   if (missile.special) {
@@ -1286,6 +1286,8 @@ function startWave() {
   spawned = 0;
   resolved = 0;
   spawnTimer = 900;
+  // Splitter appears randomly — 50% chance from wave 2, capped at 75%
+  waveHasSplitter = wave >= 2 && Math.random() < Math.min(0.5 + wave * 0.02, 0.75);
   // Don't reset specialSpawnTimer here — it carries over between waves
   hideQ();
   missiles = [];
@@ -1630,20 +1632,46 @@ function drawTruck(t) {
 function drawMissile(m, isQuestioned) {
   const now = performance.now();
   const stype = m.special ? SPECIAL_TYPES[m.specialType] : null;
-  const isSplitter = m.special && m.specialType === 'splitter';
+  const isSplitter = m.splitter === true;
   const mScale = m.mini ? 0.55 : 1;
 
-  // ── Special missile glow ring ──
+  // ── Splitter glow ring (menacing fire pulse) ──
+  if (isSplitter) {
+    const pulse = 0.5 + 0.5 * Math.sin(now * 0.005);
+    ctx.save();
+    ctx.globalAlpha = pulse * 0.7;
+    ctx.strokeStyle = '#ff5500';
+    ctx.lineWidth = 5;
+    ctx.shadowColor = '#ff3300';
+    ctx.shadowBlur = 36;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, 44 + 5 * Math.sin(now * 0.004), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    // 🔥 icon above
+    ctx.save();
+    ctx.font = 'bold 14px Rubik, Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = '#ff5500';
+    ctx.shadowColor = '#cc1100';
+    ctx.shadowBlur = 10;
+    ctx.fillText('🔥', m.x, m.y - 36);
+    ctx.restore();
+  }
+
+  // ── Other special missile glow ring ──
   if (m.special) {
     const pulse = 0.5 + 0.5 * Math.sin(now * 0.005);
     ctx.save();
     ctx.globalAlpha = pulse * 0.65;
     ctx.strokeStyle = stype.col;
-    ctx.lineWidth = isSplitter ? 5 : 3;
+    ctx.lineWidth = 3;
     ctx.shadowColor = stype.col;
-    ctx.shadowBlur = isSplitter ? 32 : 22;
+    ctx.shadowBlur = 22;
     ctx.beginPath();
-    ctx.arc(m.x, m.y, (isSplitter ? 44 : 28) + 5 * Math.sin(now * 0.004), 0, Math.PI * 2);
+    ctx.arc(m.x, m.y, 28 + 5 * Math.sin(now * 0.004), 0, Math.PI * 2);
     ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.restore();
@@ -1697,8 +1725,9 @@ function drawMissile(m, isQuestioned) {
   const noseCol = isSplitter ? '#ff4400'     : (m.special ? '#fff'       : (m.mini ? '#cbf3f0' : (isQuestioned ? '#ff5500' : '#a00018')));
   const finCol  = isSplitter ? '#881100'     : (m.special ? stype.shadow : (m.mini ? '#5b2c6f' : (isQuestioned ? '#cc3300' : '#5a000c')));
 
-  if (isQuestioned && !m.special) { ctx.shadowColor = '#ff6600'; ctx.shadowBlur = 14; }
-  if (m.special) { ctx.shadowColor = isSplitter ? '#ff3300' : stype.shadow; ctx.shadowBlur = isSplitter ? 24 : 18; }
+  if (isSplitter)        { ctx.shadowColor = '#ff3300'; ctx.shadowBlur = 24; }
+  else if (isQuestioned) { ctx.shadowColor = '#ff6600'; ctx.shadowBlur = 14; }
+  else if (m.special)    { ctx.shadowColor = stype.shadow; ctx.shadowBlur = 18; }
 
   ctx.fillStyle = bodyCol;
   rRect(ctx, -5, -14, 10, 24, 2); ctx.fill();
@@ -1827,7 +1856,11 @@ function showQ(text) {
   questionStartTime = performance.now();
   document.getElementById('question-text').textContent = text;
   const hint = document.getElementById('question-hint');
-  if (questionedMissile?.special) {
+  if (questionedMissile?.splitter) {
+    hint.textContent = '🔥 יירט את הטיל השמן — הוא יתפצל לשני טילים!';
+    hint.style.color = '#ff5500';
+    hint.style.fontWeight = '700';
+  } else if (questionedMissile?.special) {
     const st = SPECIAL_TYPES[questionedMissile.specialType];
     hint.textContent = `יירט לקבל: ${st.label}`;
     hint.style.color = st.col;
