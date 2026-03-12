@@ -1209,7 +1209,7 @@ function onIntercepted(missile, ex, ey, truckX) {
   addFloat(speedLabel, lx, TRUCK_Y - 72, labelCol);
   streak++;
   if (streak >= 3) addFloat(`🔥×${streak}`, ex, ey - 30, streak >= 7 ? '#ffd700' : '#ff8c00');
-  addEnergy(Math.min(12 + streak * 2, 32));
+  addEnergy(Math.min(3 + streak * 1.5, 18));
   resolved++;
   updateHUD();
   promoteNextQuestioned();
