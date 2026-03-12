@@ -140,6 +140,31 @@
     }
     #miss-feedback.visible { opacity: 1; }
 
+    /* Missile alert */
+    #missile-alert {
+      position: absolute;
+      top: 42%;
+      left: 0; right: 0;
+      text-align: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    #missile-alert.visible { opacity: 1; }
+    #missile-alert-inner {
+      display: inline-block;
+      color: #ff4444;
+      font-size: 1.25rem;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-shadow: 0 0 18px rgba(255,60,60,0.85);
+      animation: alertPulse 0.7s ease-in-out infinite alternate;
+    }
+    @keyframes alertPulse {
+      from { opacity: 0.55; transform: scale(0.97); }
+      to   { opacity: 1.0;  transform: scale(1.03); }
+    }
+
     /* Level-up banner */
     #level-up-banner {
       position: absolute;
@@ -403,6 +428,9 @@
 
     <!-- Miss feedback -->
     <div id="miss-feedback">החטאה! נסה סוללה אחרת!</div>
+
+    <!-- Missile alert -->
+    <div id="missile-alert"><div id="missile-alert-inner">⚠ התרעת טילים ⚠</div></div>
 
     <!-- Level-up banner -->
     <div id="level-up-banner">
@@ -807,6 +835,10 @@ function update(dt) {
 
   floatTexts.forEach(f => { f.y += f.vy * (dt/16.67); f.alpha -= 0.017*(dt/16.67); });
   floatTexts = floatTexts.filter(f => f.alpha > 0);
+
+  // Show missile alert when screen is empty but more missiles are coming
+  const showAlert = waveActive && missiles.length === 0 && spawned < totalMissiles && gameState !== 'PAUSED';
+  document.getElementById('missile-alert').classList.toggle('visible', showAlert);
 
   if (waveActive && spawned === totalMissiles && resolved === totalMissiles && missiles.length === 0) {
     waveActive = false;
