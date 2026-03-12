@@ -192,33 +192,32 @@
       to   { box-shadow: 0 0 28px rgba(0,220,255,0.95), 0 0 16px rgba(255,215,0,0.6) inset; }
     }
 
-    /* Laser button */
+    /* Laser button — icon only, sits below the vertical energy bar */
     #laser-btn-wrap {
       position: absolute;
-      bottom: 44px;
-      left: 50%;
-      transform: translateX(-50%);
+      left: 5px;
+      top: 64%;
       pointer-events: auto;
       z-index: 10;
     }
     #laser-btn {
       background: rgba(0,20,50,0.85);
-      color: #335577;
       border: 2px solid #224466;
-      border-radius: 10px;
-      padding: 6px 22px;
-      font-size: 1rem;
-      font-weight: 800;
-      font-family: 'Rubik', Arial, sans-serif;
+      border-radius: 7px;
+      width: 28px;
+      height: 28px;
+      font-size: 1.15rem;
+      padding: 0;
+      line-height: 28px;
+      text-align: center;
       cursor: not-allowed;
-      opacity: 0.35;
-      letter-spacing: 1px;
-      transition: opacity 0.3s, border-color 0.3s, color 0.3s;
+      opacity: 0.28;
+      display: block;
+      transition: opacity 0.3s, border-color 0.3s;
     }
     #laser-btn.ready {
       opacity: 1;
       cursor: pointer;
-      color: #00dcff;
       border-color: #00dcff;
       animation: laserPulse 0.55s ease-in-out infinite alternate;
     }
@@ -512,7 +511,7 @@
 
     <!-- Laser strike button -->
     <div id="laser-btn-wrap">
-      <button id="laser-btn" disabled>⚡ מטח לייזר</button>
+      <button id="laser-btn" disabled>⚡</button>
     </div>
 
     <!-- Level-up banner -->
@@ -1498,54 +1497,53 @@ function drawEffects() {
 function drawEnergyBar() {
   if (gameState !== 'PLAYING' && gameState !== 'QUESTION') return;
   const now  = performance.now();
-  const bw   = 210, bh = 11;
-  const bx   = W / 2 - bw / 2;
-  const by   = GROUND_Y - 34;
+  // Vertical bar on the left side
+  const bw   = 12, bh = 200;
+  const bx   = 10;
+  const by   = H / 2 - bh / 2;
   const fill = energy / MAX_ENERGY;
   const full = fill >= 1;
 
-  // Track shadow
   ctx.save();
-  ctx.globalAlpha = 0.80;
-  ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.beginPath(); ctx.roundRect(bx - 2, by - 2, bw + 4, bh + 4, 5); ctx.fill();
 
-  // Fill
+  // Background track
+  ctx.globalAlpha = 0.75;
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.beginPath(); ctx.roundRect(bx - 2, by - 2, bw + 4, bh + 4, 6); ctx.fill();
+
+  // Segmentation lines (5 tick marks)
+  ctx.globalAlpha = 0.25;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 5; i++) {
+    const ty = by + (bh / 5) * i;
+    ctx.beginPath(); ctx.moveTo(bx, ty); ctx.lineTo(bx + bw, ty); ctx.stroke();
+  }
+
+  // Fill — grows from bottom to top
   if (fill > 0) {
-    const grad = ctx.createLinearGradient(bx, by, bx + bw, by);
+    const fillH = bh * Math.min(fill, 1);
+    const grad  = ctx.createLinearGradient(bx, by + bh, bx, by);
     grad.addColorStop(0,   '#0055cc');
     grad.addColorStop(0.5, '#00bbff');
     grad.addColorStop(1,   full ? '#ffd700' : '#00ffcc');
-    ctx.fillStyle = grad;
-    ctx.globalAlpha = full ? (0.75 + 0.25 * Math.sin(now * 0.009)) : 0.9;
-    if (full) { ctx.shadowColor = '#00dcff'; ctx.shadowBlur = 14; }
-    ctx.beginPath(); ctx.roundRect(bx, by, bw * Math.min(fill, 1), bh, 4); ctx.fill();
+    ctx.fillStyle   = grad;
+    ctx.globalAlpha = full ? (0.78 + 0.22 * Math.sin(now * 0.009)) : 0.92;
+    if (full) { ctx.shadowColor = '#00dcff'; ctx.shadowBlur = 16; }
+    ctx.beginPath(); ctx.roundRect(bx, by + bh - fillH, bw, fillH, 4); ctx.fill();
     ctx.shadowBlur = 0;
   }
 
-  // Streak flame badge (left of bar)
+  // Streak badge above the bar
   if (streak > 0) {
     ctx.globalAlpha = 1;
-    ctx.font = `bold ${streak >= 5 ? 12 : 11}px Rubik, Arial`;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    const streakCol = streak >= 7 ? '#ffd700' : streak >= 4 ? '#ff8c00' : '#ff5555';
-    ctx.fillStyle = streakCol;
-    ctx.shadowColor = streakCol; ctx.shadowBlur = streak >= 4 ? 8 : 0;
-    ctx.fillText(`🔥×${streak}`, bx - 8, by + bh / 2);
-    ctx.shadowBlur = 0;
-  }
-
-  // "LASER READY" label (right of bar)
-  if (full) {
-    const pulse = 0.75 + 0.25 * Math.sin(now * 0.009);
-    ctx.globalAlpha = pulse;
-    ctx.font = 'bold 11px Rubik, Arial';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#00dcff';
-    ctx.shadowColor = '#00dcff'; ctx.shadowBlur = 10;
-    ctx.fillText('⚡ מוכן!', bx + bw + 8, by + bh / 2);
+    ctx.font = 'bold 10px Rubik, Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    const sc = streak >= 7 ? '#ffd700' : streak >= 4 ? '#ff8c00' : '#ff6644';
+    ctx.fillStyle  = sc;
+    ctx.shadowColor = sc; ctx.shadowBlur = streak >= 4 ? 6 : 0;
+    ctx.fillText(`🔥${streak}`, bx + bw / 2, by - 4);
     ctx.shadowBlur = 0;
   }
 
