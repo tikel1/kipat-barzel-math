@@ -420,7 +420,7 @@
       <div class="hud-block">
         <div class="hud-label">גל</div>
         <div class="hud-value">
-          <span id="wave-val">1</span><span style="color:#334;font-size:0.92rem">/10</span>
+          <span id="wave-val">1</span>
         </div>
       </div>
       <div class="hud-block">
@@ -436,7 +436,7 @@
     <!-- Question display -->
     <div id="question-display">
       <div id="question-text"></div>
-      <div id="question-hint">לחץ / גע על הסוללה עם התשובה הנכונה!</div>
+      <div id="question-hint">לחץ על הסוללה עם התשובה הנכונה</div>
     </div>
 
     <!-- Miss feedback -->
@@ -468,16 +468,16 @@
         <div class="diff-label">בחרו רמת קושי</div>
         <div class="level-grid">
           <button class="level-btn active" data-level="1">
-            חיבור וחיסור<small>מספרים עד 20</small>
+            מתחיל<small>חיבור וחיסור עד 50</small>
           </button>
           <button class="level-btn" data-level="2">
-            חיבור וחיסור<small>מספרים עד 100</small>
+            מתקדם<small>חיבור וחיסור עד 200</small>
           </button>
           <button class="level-btn" data-level="3">
-            כפל<small>לוח הכפל 2–5</small>
+            קשה<small>כפל וחילוק 1–10</small>
           </button>
           <button class="level-btn" data-level="4">
-            כפל<small>לוח הכפל 6–10</small>
+            טירוף<small>כפל וחילוק 1–50</small>
           </button>
         </div>
       </div>
@@ -492,10 +492,10 @@
       <button class="btn-primary" id="btn-replay">↺  נסה שוב</button>
     </div>
 
-    <!-- Win screen -->
+    <!-- Win screen (kept for future use) -->
     <div class="screen hidden" id="screen-win">
       <h2 class="win">🏆 העיר ניצלה!</h2>
-      <p>מדהים! הגנתם על גבעתיים בכל 10 הגלים!</p>
+      <p>מדהים! הגנתם על העיר!</p>
       <div class="final-score" id="win-score">ניקוד: 0</div>
       <button class="btn-primary" id="btn-replay-win">↺  שחק שוב</button>
     </div>
@@ -518,20 +518,15 @@ const Q_TRIGGER_Y  = H * 0.22; // enemy missile y that shows question (high up =
 const SLOW_SPEED   = 0.28;     // px/frame while question is showing
 const BASE_SPEED   = 1.10;     // px/frame at 60fps, wave 1
 
-// Smoother difficulty curve
-const WAVE_CFG = [
-  null,
-  { n:4,  ms:3800, spd:0.80, lvl:1 },  // wave 1
-  { n:5,  ms:3200, spd:0.98, lvl:1 },  // wave 2
-  { n:5,  ms:2600, spd:1.18, lvl:2 },  // wave 3
-  { n:6,  ms:2100, spd:1.40, lvl:2 },  // wave 4
-  { n:7,  ms:1750, spd:1.65, lvl:2 },  // wave 5
-  { n:7,  ms:1400, spd:1.95, lvl:3 },  // wave 6
-  { n:8,  ms:1250, spd:2.28, lvl:3 },  // wave 7
-  { n:9,  ms:1100, spd:2.65, lvl:4 },  // wave 8
-  { n:10, ms:950,  spd:3.05, lvl:4 },  // wave 9
-  { n:11, ms:800,  spd:3.50, lvl:4 },  // wave 10
-];
+// Infinite wave config — escalates smoothly over 40 waves then stays maxed
+function getWaveCfg(w) {
+  const t = Math.min(w - 1, 39) / 39; // 0→1 over waves 1-40, then stable
+  return {
+    n:   Math.round(4 + t * 11),                      // 4 → 15 missiles
+    ms:  Math.max(1100, Math.round(3800 - t * 2700)), // 3800 → 1100ms spawn interval
+    spd: +(0.80 + t * 2.70).toFixed(3),               // 0.80 → 3.50 speed
+  };
+}
 
 // ═══════════════════════════════════════════════════════════
 //  CANVAS
@@ -569,6 +564,7 @@ let spawned         = 0;
 let resolved        = 0;
 let spawnTimer      = 0;
 let waveActive      = false;
+let questionStartTime = 0; // for speed-based scoring
 
 let missiles        = [];
 let questionedMissile = null;
@@ -586,23 +582,57 @@ let hoveredTruck = null;
 const bgGame = new Image();
 bgGame.src = './bg-game.png';
 
+const cloudsImg = new Image();
+cloudsImg.src = './clouds.png';
+
+const STARS = Array.from({length: 60}, () => ({
+  x: Math.random() * W,
+  y: Math.random() * H * 0.55,
+  r: Math.random() * 1.3 + 0.25,
+  phase: Math.random() * Math.PI * 2,
+}));
+
+// Parallax cloud layers: sprite 0 = top cloud, sprite 1 = bottom cloud
+const CLOUDS = [
+  { sprite: 0, x: W * 0.05, y: H * 0.04, scale: 0.82, speed: 0.20, alpha: 0.50 },
+  { sprite: 1, x: W * 0.55, y: H * 0.13, scale: 0.52, speed: 0.34, alpha: 0.40 },
+  { sprite: 0, x: W * 1.10, y: H * 0.22, scale: 0.36, speed: 0.52, alpha: 0.30 },
+  { sprite: 1, x: W * 0.25, y: H * 0.19, scale: 0.67, speed: 0.26, alpha: 0.44 },
+  { sprite: 0, x: W * 0.78, y: H * 0.09, scale: 0.44, speed: 0.62, alpha: 0.28 },
+];
+
 // ═══════════════════════════════════════════════════════════
 //  MATH ENGINE
 // ═══════════════════════════════════════════════════════════
 function genQuestion(lvl) {
+  // lvl is fixed to user's chosen difficulty — no cross-level escalation
   let a, b, op, ans;
   if (lvl === 1) {
+    // מתחיל: חיבור וחיסור עד 50
     op = Math.random() < 0.5 ? '+' : '−';
-    if (op === '+') { a = ri(1,14); b = ri(1, 20-a); ans = a+b; }
-    else            { a = ri(4,20); b = ri(1, a-1);  ans = a-b; }
+    if (op === '+') { a = ri(1,40); b = ri(1, 50-a); ans = a+b; }
+    else            { a = ri(6,50); b = ri(1, a-1);  ans = a-b; }
   } else if (lvl === 2) {
+    // מתקדם: חיבור וחיסור עד 200
     op = Math.random() < 0.5 ? '+' : '−';
-    if (op === '+') { a = ri(10,75); b = ri(5, 100-a); ans = a+b; }
-    else            { a = ri(15,98); b = ri(5, a-5);   ans = a-b; }
+    if (op === '+') { a = ri(10,170); b = ri(5, 200-a); ans = a+b; }
+    else            { a = ri(20,198); b = ri(5, a-5);   ans = a-b; }
   } else if (lvl === 3) {
-    op = '×'; b = ri(2,5);  a = ri(2,12); ans = a*b;
+    // קשה: כפל וחילוק 1-10
+    if (Math.random() < 0.5) {
+      op = '×'; a = ri(2,10); b = ri(2,10); ans = a*b;
+    } else {
+      ans = ri(1,10); b = ri(2,10); a = ans*b;
+      op = '÷';
+    }
   } else {
-    op = '×'; b = ri(6,10); a = ri(2,12); ans = a*b;
+    // טירוף: כפל וחילוק 1-50
+    if (Math.random() < 0.5) {
+      op = '×'; a = ri(2,50); b = ri(2,50); ans = a*b;
+    } else {
+      ans = ri(1,50); b = ri(2,50); a = ans*b;
+      op = '÷';
+    }
   }
   return {text: `${a} ${op} ${b} = ?`, ans};
 }
@@ -658,7 +688,7 @@ function mkMissile() {
     x: ri(65, W-65),
     y: -30,
     tx: ri(65, W-65),
-    speed: BASE_SPEED * WAVE_CFG[wave].spd,
+    speed: BASE_SPEED * getWaveCfg(wave).spd,
     trail: [],
     active: true,
     qTriggered: false,
@@ -784,7 +814,7 @@ function loop(ts) {
   const dt = Math.min(ts - lastTs, 50);
   lastTs = ts;
   update(dt);
-  draw();
+  draw(dt);
   requestAnimationFrame(loop);
 }
 
@@ -801,7 +831,7 @@ function update(dt) {
   });
 
   if (waveActive && (gameState === 'PLAYING' || gameState === 'QUESTION')) {
-    const cfg = WAVE_CFG[wave];
+    const cfg = getWaveCfg(wave);
     if (spawned < totalMissiles && missiles.length < 3) {
       spawnTimer -= dt;
       if (spawnTimer <= 0) {
@@ -852,7 +882,7 @@ function updateMissile(m, dt) {
   if (!m.qTriggered && m.y >= Q_TRIGGER_Y && questionedMissile === null) {
     m.qTriggered = true;
     questionedMissile = m;
-    const q = genQuestion(Math.max(minMathLvl, WAVE_CFG[wave].lvl));
+    const q = genQuestion(minMathLvl);
     m.question = q;
     assignAnswers(q);
     showQ(q.text);
@@ -871,7 +901,7 @@ function promoteNextQuestioned() {
   if (candidates.length > 0) {
     candidates.sort((a, b) => b.y - a.y);
     questionedMissile = candidates[0];
-    const q = genQuestion(Math.max(minMathLvl, WAVE_CFG[wave].lvl));
+    const q = genQuestion(minMathLvl);
     questionedMissile.question = q;
     questionedMissile.wrongFires = 0;
     assignAnswers(q);
@@ -888,14 +918,16 @@ function updateInterceptor(ic, dt) {
   if (ic.trail.length > 14) ic.trail.shift();
 
   if (ic.correct) {
+    // Guard: target already destroyed by a sibling interceptor this frame
+    if (!ic.target.active) { ic.active = false; return; }
     const dx = ic.target.x - ic.x;
     const dy = ic.target.y - ic.y;
     const dist = Math.hypot(dx, dy);
     if (dist < 20) {
+      ic.target.active = false; // mark FIRST — prevents double-count
       const ex = ic.x, ey = ic.y;
       explosions.push(mkExplosion(ex, ey, true));
       beep('boom');
-      ic.target.active = false;
       onIntercepted(ic.target, ex, ey);
       ic.active = false;
       return;
@@ -935,33 +967,44 @@ function updateExplosion(ex, dt) {
 //  GAME EVENTS
 // ═══════════════════════════════════════════════════════════
 function fireTruck(truck) {
-  if (truck.stock <= 0) return;
   if (!questionedMissile?.active) return;
-  truck.stock--;
   truck.flashT = 320;
-
   explosions.push(mkExplosion(truck.x, truck.y - 25, false));
-  const ic = mkInterceptor(truck.x, truck.y, questionedMissile, truck.correct);
-  interceptors.push(ic);
 
   if (truck.correct) {
+    // Correct answer — free shot, no ammo cost
     beep('correct');
+    const ic = mkInterceptor(truck.x, truck.y, questionedMissile, true);
+    interceptors.push(ic);
   } else {
+    // Wrong answer — costs 1 ammo; if empty, no shot
+    if (truck.stock <= 0) return;
+    truck.stock--;
     beep('wrong');
     truck.shakeT = 420;
     questionedMissile.wrongFires++;
     showMiss();
+    const ic = mkInterceptor(truck.x, truck.y, questionedMissile, false);
+    interceptors.push(ic);
   }
 }
 
 function onIntercepted(missile, ex, ey) {
-  const base    = 100;
-  const spBonus = Math.round(missile.speed * 22);
+  const elapsed = (performance.now() - questionStartTime) / 1000;
+  let speedLabel, speedBonus, labelCol;
+  if (elapsed < 2.5) {
+    speedLabel = '⚡ יירוט מהיר!'; speedBonus = 150; labelCol = '#ffd700';
+  } else if (elapsed < 6) {
+    speedLabel = '✓ יירוט טוב';   speedBonus = 80;  labelCol = '#2ec4b6';
+  } else {
+    speedLabel = '⏱ בשניה האחרונה'; speedBonus = 30; labelCol = '#ff9966';
+  }
   const ftBonus = missile.wrongFires === 0 ? 50 : 0;
-  const wvBonus = wave * 10;
-  const pts     = base + spBonus + ftBonus + wvBonus;
+  const wvBonus = Math.min(wave * 8, 200);
+  const pts = speedBonus + ftBonus + wvBonus;
   score += pts;
-  addFloat(`+${pts}`, ex, ey - 10);
+  addFloat(`+${pts}`, ex, ey - 10, labelCol);
+  addFloat(speedLabel, ex, ey - 38, labelCol);
   resolved++;
   updateHUD();
   promoteNextQuestioned();
@@ -969,8 +1012,9 @@ function onIntercepted(missile, ex, ey) {
   if (waveActive && spawned < totalMissiles && missiles.length < 3) {
     missiles.push(mkMissile());
     spawned++;
-    spawnTimer = WAVE_CFG[wave].ms;
+    spawnTimer = getWaveCfg(wave).ms;
   }
+  if (window.hj) hj('event', `intercept_${elapsed < 2.5 ? 'fast' : elapsed < 6 ? 'good' : 'last'}`);
 }
 
 function missileHit(missile) {
@@ -990,18 +1034,29 @@ function missileHit(missile) {
 }
 
 function onWaveComplete() {
-  if (wave >= 10) { setTimeout(() => endGame(true), 600); return; }
   const nextWave = wave + 1;
-  showBanner(`גל ${wave} הושלם! ✓`, `מתכוננים לגל ${nextWave}…`);
+  let bannerTitle = `גל ${wave} הושלם! ✓`;
+  let bannerSub   = `מתכוננים לגל ${nextWave}…`;
+
+  if (wave % 10 === 0) {
+    lives = Math.min(lives + 1, 6); // bonus life every 10 waves (max 6)
+    updateHUD();
+    bannerTitle = `🎉 גל ${wave} הושלם!`;
+    bannerSub   = `❤ קיבלתם חיים נוספים — המשיכו!`;
+    if (window.hj) hj('event', `milestone_wave_${wave}`);
+  }
+
+  showBanner(bannerTitle, bannerSub);
+  if (window.hj) hj('event', `wave_complete`);
   setTimeout(() => {
     hideBanner();
     wave = nextWave;
     startWave();
-  }, 2400);
+  }, 2600);
 }
 
 function startWave() {
-  const cfg = WAVE_CFG[wave];
+  const cfg = getWaveCfg(wave);
   totalMissiles = cfg.n;
   spawned = 0;
   resolved = 0;
@@ -1020,6 +1075,7 @@ function startNewGame() {
   missiles = []; interceptors = []; explosions = []; floatTexts = [];
   questionedMissile = null;
   damageFlash = 0; hoveredTruck = null;
+  if (window.hj) hj('event', `game_start_diff${minMathLvl}`);
   if (gameState === 'PAUSED') {
     document.getElementById('pause-overlay').classList.add('hidden');
     document.getElementById('btn-pause').classList.remove('paused');
@@ -1040,14 +1096,17 @@ function endGame(won) {
     document.getElementById('gameover-score').textContent = `ניקוד: ${score}`;
     showScreen('gameover');
   }
+  if (window.hj) hj('event', `game_over_wave${wave}_score${score}_diff${minMathLvl}`);
 }
 
 // ═══════════════════════════════════════════════════════════
 //  RENDER
 // ═══════════════════════════════════════════════════════════
-function draw() {
+function draw(dt) {
   ctx.clearRect(0, 0, W, H);
   drawBG();
+  drawStars();
+  drawClouds(dt);
   drawGround();
   drawTrucks();
   missiles.filter(m => m.active && m !== questionedMissile).forEach(m => drawMissile(m, false));
@@ -1071,6 +1130,41 @@ function drawBG() {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
   }
+}
+
+function drawStars() {
+  const now = performance.now() * 0.0008;
+  ctx.fillStyle = '#fff';
+  STARS.forEach(s => {
+    ctx.globalAlpha = 0.28 + 0.32 * Math.sin(now + s.phase);
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+function drawClouds(dt) {
+  if (!cloudsImg.complete || !cloudsImg.naturalWidth) return;
+  const iw = cloudsImg.naturalWidth;
+  const ih = cloudsImg.naturalHeight;
+  const halfH = ih / 2;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen'; // removes black bg from clouds PNG
+  CLOUDS.forEach(c => {
+    // Move right-to-left
+    c.x -= c.speed * ((dt || 16.67) / 16.67);
+    const dw = W * 0.80 * c.scale;
+    const dh = dw * (halfH / iw);
+    if (c.x + dw < 0) c.x = W + 10; // wrap around
+    const sy = c.sprite === 0 ? 0 : halfH;
+    ctx.globalAlpha = c.alpha;
+    ctx.drawImage(cloudsImg, 0, sy, iw, halfH, c.x, c.y, dw, dh);
+  });
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 function drawGround() {
@@ -1178,29 +1272,29 @@ function drawTruck(t) {
   ctx.fillStyle = C.light;
   ctx.beginPath(); ctx.arc(46, -30, 2, 0, Math.PI * 2); ctx.fill();
 
-  // ── Answer number badge ──
+  // ── Answer number badge — always visible ──
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.shadowBlur = 0;
-  if (!empty && t.ansVal !== null) {
-    const hov = hovered;
-    ctx.fillStyle = hov ? 'rgba(46,196,182,0.25)' : 'rgba(0,0,15,0.78)';
-    ctx.strokeStyle = hov ? '#2ec4b6' : '#3a7070';
+  if (t.ansVal !== null) {
+    const hov = hovered && !empty;
+    const depleted = empty;
+    ctx.fillStyle = depleted ? 'rgba(30,0,0,0.78)' : hov ? 'rgba(46,196,182,0.25)' : 'rgba(0,0,15,0.78)';
+    ctx.strokeStyle = depleted ? '#5a1010' : hov ? '#2ec4b6' : '#3a7070';
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(-4, -34, 19, 0, Math.PI * 2);
     ctx.fill(); ctx.stroke();
-    ctx.fillStyle = hov ? '#2ec4b6' : '#fff';
+    ctx.fillStyle = depleted ? '#663333' : hov ? '#2ec4b6' : '#fff';
     ctx.shadowColor = 'rgba(46,196,182,0.6)';
-    ctx.shadowBlur = hov ? 14 : 6;
+    ctx.shadowBlur = (hov && !depleted) ? 14 : 6;
     ctx.font = 'bold 18px Rubik, Segoe UI, Arial';
-    // Counter-flip text for the mirrored battery
     ctx.save();
     ctx.translate(-4, -34);
     if (flip) ctx.scale(-1, 1);
     ctx.fillText(String(t.ansVal), 0, 0);
     ctx.restore();
     ctx.shadowBlur = 0;
-  } else if (!empty) {
+  } else {
     ctx.fillStyle = '#2a2a2a';
     ctx.beginPath(); ctx.arc(-4, -34, 19, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#556';
@@ -1383,6 +1477,7 @@ function drawFloats() {
 //  UI HELPERS
 // ═══════════════════════════════════════════════════════════
 function showQ(text) {
+  questionStartTime = performance.now();
   document.getElementById('question-text').textContent = text;
   document.getElementById('question-display').classList.add('visible');
 }
@@ -1507,6 +1602,7 @@ document.querySelectorAll('.level-btn').forEach(btn => {
     minMathLvl = parseInt(btn.dataset.level);
     document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    if (window.hj) hj('event', `difficulty_selected_${minMathLvl}`);
   });
 });
 
