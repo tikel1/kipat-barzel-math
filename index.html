@@ -187,6 +187,41 @@
       from { opacity: 0.55; transform: scale(0.97); }
       to   { opacity: 1.0;  transform: scale(1.03); }
     }
+    @keyframes laserPulse {
+      from { box-shadow: 0 0 10px rgba(0,220,255,0.5), 0 0 4px #00dcff inset; }
+      to   { box-shadow: 0 0 28px rgba(0,220,255,0.95), 0 0 16px rgba(255,215,0,0.6) inset; }
+    }
+
+    /* Laser button */
+    #laser-btn-wrap {
+      position: absolute;
+      bottom: 44px;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: auto;
+      z-index: 10;
+    }
+    #laser-btn {
+      background: rgba(0,20,50,0.85);
+      color: #335577;
+      border: 2px solid #224466;
+      border-radius: 10px;
+      padding: 6px 22px;
+      font-size: 1rem;
+      font-weight: 800;
+      font-family: 'Rubik', Arial, sans-serif;
+      cursor: not-allowed;
+      opacity: 0.35;
+      letter-spacing: 1px;
+      transition: opacity 0.3s, border-color 0.3s, color 0.3s;
+    }
+    #laser-btn.ready {
+      opacity: 1;
+      cursor: pointer;
+      color: #00dcff;
+      border-color: #00dcff;
+      animation: laserPulse 0.55s ease-in-out infinite alternate;
+    }
 
     /* Level-up banner */
     #level-up-banner {
@@ -475,6 +510,11 @@
     <!-- Power-up banner -->
     <div id="power-banner"><div id="power-banner-inner"></div></div>
 
+    <!-- Laser strike button -->
+    <div id="laser-btn-wrap">
+      <button id="laser-btn" disabled>⚡ מטח לייזר</button>
+    </div>
+
     <!-- Level-up banner -->
     <div id="level-up-banner">
       <div id="level-up-text">הגל הושלם!</div>
@@ -614,6 +654,12 @@ let hintTimer        = 0;   // ms remaining
 let shieldActive     = false;
 let specialSpawnTimer = 25000; // ms until next special missile spawn
 let waveHasSplitter   = false; // whether the current wave ends with the fat splitter
+
+// ── Streak & Energy ──
+let streak     = 0;
+let energy     = 0;
+const MAX_ENERGY = 100;
+let lasers     = []; // [{x1,y1,x2,y2,alpha,elapsed}]
 
 let missiles        = [];
 let questionedMissile = null;
@@ -961,6 +1007,9 @@ function update(dt) {
   floatTexts.forEach(f => { f.y += f.vy * (dt/16.67); f.alpha -= 0.017*(dt/16.67); });
   floatTexts = floatTexts.filter(f => f.alpha > 0);
 
+  lasers.forEach(l => { l.elapsed += dt; l.alpha = Math.max(0, 1 - l.elapsed / 700); });
+  lasers = lasers.filter(l => l.alpha > 0);
+
   // Show missile alert only for regular missiles
   const regularMissiles = missiles.filter(m => !m.mini && !m.special);
   const showAlert = waveActive && regularMissiles.length === 0 && spawned < totalMissiles && gameState !== 'PAUSED';
@@ -1094,6 +1143,7 @@ function fireTruck(truck) {
     truck.stock--;
     beep('wrong');
     truck.shakeT = 420;
+    streak = 0;
     questionedMissile.wrongFires++;
     showMiss();
     const ic = mkInterceptor(truck.x, truck.y, questionedMissile, false);
@@ -1158,6 +1208,9 @@ function onIntercepted(missile, ex, ey, truckX) {
   score += pts;
   addFloat(`+${pts}`, ex, ey - 10, doubleScoreTimer > 0 ? '#ffd700' : labelCol);
   addFloat(speedLabel, lx, TRUCK_Y - 72, labelCol);
+  streak++;
+  if (streak >= 3) addFloat(`🔥×${streak}`, ex, ey - 30, streak >= 7 ? '#ffd700' : '#ff8c00');
+  addEnergy(Math.min(12 + streak * 2, 32));
   resolved++;
   updateHUD();
   promoteNextQuestioned();
@@ -1243,6 +1296,7 @@ function missileHit(missile) {
   }
 
   // ── Regular missile hits city ──
+  streak = 0;
   resolved++;
   explosions.push(mkExplosion(missile.x, GROUND_Y - 18, true));
   beep('hit');
@@ -1305,6 +1359,7 @@ function startNewGame() {
   questionedMissile = null;
   damageFlash = 0; hoveredTruck = null;
   doubleScoreTimer = 0; freezeTimer = 0; hintTimer = 0; shieldActive = false;
+  streak = 0; energy = 0; lasers = []; updateLaserBtn();
   specialSpawnTimer = ri(9000, 15000); // first special missile within 9-15 seconds
   if (window.hj) hj('event', `game_start_diff${minMathLvl}`);
   if (gameState === 'PAUSED') {
@@ -1343,9 +1398,11 @@ function draw(dt) {
   missiles.filter(m => m.active && m !== questionedMissile).forEach(m => drawMissile(m, false));
   if (questionedMissile?.active) drawMissile(questionedMissile, true);
   interceptors.forEach(drawInterceptor);
+  drawLasers();
   explosions.forEach(drawExplosion);
   drawFloats();
   drawEffects();
+  drawEnergyBar();
   if (damageFlash > 0) {
     ctx.fillStyle = `rgba(210,20,20,${Math.min(0.45, (damageFlash/700)*0.45)})`;
     ctx.fillRect(0, 0, W, H);
@@ -1436,6 +1493,90 @@ function drawEffects() {
   });
   ctx.globalAlpha = 1;
   ctx.textAlign = 'left';
+}
+
+function drawEnergyBar() {
+  if (gameState !== 'PLAYING' && gameState !== 'QUESTION') return;
+  const now  = performance.now();
+  const bw   = 210, bh = 11;
+  const bx   = W / 2 - bw / 2;
+  const by   = GROUND_Y - 34;
+  const fill = energy / MAX_ENERGY;
+  const full = fill >= 1;
+
+  // Track shadow
+  ctx.save();
+  ctx.globalAlpha = 0.80;
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.beginPath(); ctx.roundRect(bx - 2, by - 2, bw + 4, bh + 4, 5); ctx.fill();
+
+  // Fill
+  if (fill > 0) {
+    const grad = ctx.createLinearGradient(bx, by, bx + bw, by);
+    grad.addColorStop(0,   '#0055cc');
+    grad.addColorStop(0.5, '#00bbff');
+    grad.addColorStop(1,   full ? '#ffd700' : '#00ffcc');
+    ctx.fillStyle = grad;
+    ctx.globalAlpha = full ? (0.75 + 0.25 * Math.sin(now * 0.009)) : 0.9;
+    if (full) { ctx.shadowColor = '#00dcff'; ctx.shadowBlur = 14; }
+    ctx.beginPath(); ctx.roundRect(bx, by, bw * Math.min(fill, 1), bh, 4); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // Streak flame badge (left of bar)
+  if (streak > 0) {
+    ctx.globalAlpha = 1;
+    ctx.font = `bold ${streak >= 5 ? 12 : 11}px Rubik, Arial`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const streakCol = streak >= 7 ? '#ffd700' : streak >= 4 ? '#ff8c00' : '#ff5555';
+    ctx.fillStyle = streakCol;
+    ctx.shadowColor = streakCol; ctx.shadowBlur = streak >= 4 ? 8 : 0;
+    ctx.fillText(`🔥×${streak}`, bx - 8, by + bh / 2);
+    ctx.shadowBlur = 0;
+  }
+
+  // "LASER READY" label (right of bar)
+  if (full) {
+    const pulse = 0.75 + 0.25 * Math.sin(now * 0.009);
+    ctx.globalAlpha = pulse;
+    ctx.font = 'bold 11px Rubik, Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#00dcff';
+    ctx.shadowColor = '#00dcff'; ctx.shadowBlur = 10;
+    ctx.fillText('⚡ מוכן!', bx + bw + 8, by + bh / 2);
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function drawLasers() {
+  if (!lasers.length) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  lasers.forEach(l => {
+    const w = 2 + l.alpha * 5;
+    // Outer glow beam
+    ctx.globalAlpha = l.alpha * 0.55;
+    ctx.strokeStyle = '#00aaff';
+    ctx.lineWidth   = w + 4;
+    ctx.shadowColor = '#00dcff';
+    ctx.shadowBlur  = 22;
+    ctx.beginPath(); ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2); ctx.stroke();
+    // Core beam
+    ctx.globalAlpha = l.alpha;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth   = w;
+    ctx.shadowBlur  = 12;
+    ctx.beginPath(); ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2); ctx.stroke();
+  });
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur  = 0;
+  ctx.restore();
 }
 
 function drawGround() {
@@ -1894,6 +2035,57 @@ function showPowerBanner(text, col) {
   }, 2200);
 }
 
+function addEnergy(amount) {
+  energy = Math.min(energy + amount, MAX_ENERGY);
+  updateLaserBtn();
+}
+
+function updateLaserBtn() {
+  const btn = document.getElementById('laser-btn');
+  if (!btn) return;
+  if (energy >= MAX_ENERGY) {
+    btn.disabled = false;
+    btn.classList.add('ready');
+  } else {
+    btn.disabled = true;
+    btn.classList.remove('ready');
+  }
+}
+
+function activateLaser() {
+  if (energy < MAX_ENERGY) return;
+  energy = 0;
+  streak = 0;
+  updateLaserBtn();
+
+  const targets = missiles.filter(m => m.active);
+  if (targets.length === 0) return;
+
+  // Fire laser beams from each truck to each target
+  trucks.forEach(truck => {
+    targets.forEach(m => {
+      lasers.push({ x1: truck.x, y1: truck.y - 38, x2: m.x, y2: m.y, alpha: 1, elapsed: 0 });
+    });
+  });
+
+  // Destroy all targets
+  targets.forEach(m => {
+    m.active = false;
+    explosions.push(mkExplosion(m.x, m.y, true));
+    beep('boom');
+    let pts = 70 * (doubleScoreTimer > 0 ? 2 : 1);
+    score += pts;
+    addFloat(`+${pts}`, m.x, m.y - 10, '#00dcff');
+    if (!m.special) resolved++;   // count regular & splitter toward wave
+  });
+
+  // Clear game question state
+  questionedMissile = null;
+  hideQ();
+  gameState = 'PLAYING';
+  updateHUD();
+}
+
 function showMiss() {
   const el = document.getElementById('miss-feedback');
   el.classList.add('visible');
@@ -2029,6 +2221,10 @@ document.getElementById('btn-gameover-menu').addEventListener('click', () => {
   questionedMissile = null; damageFlash = 0; hoveredTruck = null; waveActive = false;
   hideQ();
   showScreen('start');
+});
+
+document.getElementById('laser-btn').addEventListener('click', () => {
+  unlockAudio(); activateLaser();
 });
 
 // ═══════════════════════════════════════════════════════════
