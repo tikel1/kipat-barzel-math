@@ -931,8 +931,9 @@ function update(dt) {
   const showAlert = waveActive && regularMissiles.length === 0 && spawned < totalMissiles && gameState !== 'PAUSED';
   document.getElementById('missile-alert').classList.toggle('visible', showAlert);
 
-  // Wave complete: only count regular missiles
-  if (waveActive && spawned === totalMissiles && resolved === totalMissiles && regularMissiles.length === 0) {
+  // Wave complete: wait for both regular AND special missiles to finish (mini are autonomous)
+  const nonMiniMissiles = missiles.filter(m => !m.mini);
+  if (waveActive && spawned === totalMissiles && resolved === totalMissiles && nonMiniMissiles.length === 0) {
     waveActive = false;
     onWaveComplete();
   }
@@ -972,7 +973,7 @@ function updateMissile(m, dt) {
 function promoteNextQuestioned() {
   questionedMissile = null;
   if (missiles.length === 0) { hideQ(); gameState = 'PLAYING'; return; }
-  const candidates = missiles.filter(m => m.active && m.qTriggered);
+  const candidates = missiles.filter(m => m.active && m.qTriggered && !m.mini);
   if (candidates.length > 0) {
     candidates.sort((a, b) => b.y - a.y);
     questionedMissile = candidates[0];
@@ -1242,6 +1243,7 @@ function startWave() {
   resolved = 0;
   spawnTimer = 900;
   // Don't reset specialSpawnTimer here — it carries over between waves
+  hideQ();
   missiles = [];
   questionedMissile = null;
   interceptors = interceptors.filter(ic => ic.active);
