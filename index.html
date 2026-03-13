@@ -187,39 +187,40 @@
       from { opacity: 0.55; transform: scale(0.97); }
       to   { opacity: 1.0;  transform: scale(1.03); }
     }
-    @keyframes laserPulse {
-      from { box-shadow: 0 0 10px rgba(0,220,255,0.5), 0 0 4px #00dcff inset; }
-      to   { box-shadow: 0 0 28px rgba(0,220,255,0.95), 0 0 16px rgba(255,215,0,0.6) inset; }
-    }
-
-    /* Laser button — icon only, sits below the vertical energy bar */
+    /* Laser button — circular, sits below the vertical energy bar */
     #laser-btn-wrap {
       position: absolute;
-      left: 5px;
-      top: 64%;
+      left: 3px;
+      top: 65.5%;
       pointer-events: auto;
       z-index: 10;
     }
     #laser-btn {
-      background: rgba(0,20,50,0.85);
-      border: 2px solid #224466;
-      border-radius: 7px;
-      width: 28px;
-      height: 28px;
-      font-size: 1.15rem;
+      background: radial-gradient(circle at 40% 35%, #002040 0%, #00060f 100%);
+      border: 2px solid #112233;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      font-size: 1.35rem;
       padding: 0;
-      line-height: 28px;
-      text-align: center;
       cursor: not-allowed;
-      opacity: 0.28;
-      display: block;
-      transition: opacity 0.3s, border-color 0.3s;
+      opacity: 0.3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: inset 0 0 6px rgba(0,80,160,0.4);
+      transition: opacity 0.25s, border-color 0.25s;
     }
     #laser-btn.ready {
       opacity: 1;
       cursor: pointer;
-      border-color: #00dcff;
-      animation: laserPulse 0.55s ease-in-out infinite alternate;
+      border-color: #00ccff;
+      background: radial-gradient(circle at 40% 35%, #003366 0%, #001122 100%);
+      animation: laserPulse 0.5s ease-in-out infinite alternate;
+    }
+    @keyframes laserPulse {
+      from { box-shadow: 0 0 8px rgba(0,180,255,0.55), inset 0 0 8px rgba(0,100,200,0.3); }
+      to   { box-shadow: 0 0 22px rgba(0,210,255,0.95), 0 0 44px rgba(0,140,255,0.45), inset 0 0 12px rgba(0,180,255,0.5); }
     }
 
     /* Level-up banner */
@@ -1402,6 +1403,7 @@ function draw(dt) {
   drawFloats();
   drawEffects();
   drawEnergyBar();
+  drawStreak();
   if (damageFlash > 0) {
     ctx.fillStyle = `rgba(210,20,20,${Math.min(0.45, (damageFlash/700)*0.45)})`;
     ctx.fillRect(0, 0, W, H);
@@ -1534,20 +1536,27 @@ function drawEnergyBar() {
     ctx.shadowBlur = 0;
   }
 
-  // Streak badge above the bar
-  if (streak > 0) {
-    ctx.globalAlpha = 1;
-    ctx.font = 'bold 10px Rubik, Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    const sc = streak >= 7 ? '#ffd700' : streak >= 4 ? '#ff8c00' : '#ff6644';
-    ctx.fillStyle  = sc;
-    ctx.shadowColor = sc; ctx.shadowBlur = streak >= 4 ? 6 : 0;
-    ctx.fillText(`🔥${streak}`, bx + bw / 2, by - 4);
-    ctx.shadowBlur = 0;
-  }
-
   ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function drawStreak() {
+  if (gameState !== 'PLAYING' && gameState !== 'QUESTION') return;
+  if (streak < 2) return;
+  const now = performance.now();
+  ctx.save();
+  const sc  = streak >= 10 ? '#ffd700' : streak >= 6 ? '#ff8c00' : '#ff6644';
+  const sz  = Math.min(11 + streak * 0.9, 22);
+  const pulse = streak >= 6 ? 0.85 + 0.15 * Math.sin(now * 0.008) : 1;
+  ctx.globalAlpha = pulse;
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold ${sz}px Rubik, Arial`;
+  ctx.fillStyle   = sc;
+  ctx.shadowColor = sc;
+  ctx.shadowBlur  = streak >= 6 ? 14 : 6;
+  ctx.fillText(`×${streak} 🔥`, W / 2, 58);
+  ctx.shadowBlur = 0;
   ctx.restore();
 }
 
@@ -1778,25 +1787,34 @@ function drawMissile(m, isQuestioned) {
   if (isSplitter) {
     const pulse = 0.5 + 0.5 * Math.sin(now * 0.005);
     ctx.save();
-    ctx.globalAlpha = pulse * 0.7;
-    ctx.strokeStyle = '#ff5500';
-    ctx.lineWidth = 5;
-    ctx.shadowColor = '#ff3300';
-    ctx.shadowBlur = 36;
+    // outer soft halo
+    ctx.globalAlpha = pulse * 0.4;
+    ctx.strokeStyle = '#ff2200';
+    ctx.lineWidth = 10;
+    ctx.shadowColor = '#ff2200';
+    ctx.shadowBlur = 48;
     ctx.beginPath();
-    ctx.arc(m.x, m.y, 44 + 5 * Math.sin(now * 0.004), 0, Math.PI * 2);
+    ctx.arc(m.x, m.y, 58 + 6 * Math.sin(now * 0.004), 0, Math.PI * 2);
+    ctx.stroke();
+    // inner sharp ring
+    ctx.globalAlpha = pulse * 0.85;
+    ctx.strokeStyle = '#ff5500';
+    ctx.lineWidth = 3;
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, 40 + 4 * Math.sin(now * 0.006), 0, Math.PI * 2);
     ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.restore();
-    // 🔥 icon above
+    // ☢ warning icon above
     ctx.save();
-    ctx.font = 'bold 14px Rubik, Arial';
+    ctx.font = 'bold 16px Rubik, Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillStyle = '#ff5500';
-    ctx.shadowColor = '#cc1100';
-    ctx.shadowBlur = 10;
-    ctx.fillText('🔥', m.x, m.y - 36);
+    ctx.fillStyle = '#ffcc00';
+    ctx.shadowColor = '#ff4400';
+    ctx.shadowBlur = 14;
+    ctx.fillText('☢', m.x, m.y - 44);
     ctx.restore();
   }
 
@@ -1856,62 +1874,62 @@ function drawMissile(m, isQuestioned) {
   ctx.save();
   ctx.translate(m.x, m.y);
   // Splitter is visually fat — stretch wider, squash taller
-  ctx.scale(mScale * (isSplitter ? 1.8 : 1), mScale * (isSplitter ? 1.3 : 1));
+  ctx.scale(mScale * (isSplitter ? 2.2 : 1), mScale * (isSplitter ? 1.5 : 1));
   ctx.rotate(ang);
 
   // Color scheme: splitter = black/fire, special = type color, mini = purple, normal = red
-  const bodyCol = isSplitter ? '#141414'     : (m.special ? stype.col    : (m.mini ? '#9b59b6' : (isQuestioned ? '#e84000' : '#7a0010')));
-  const noseCol = isSplitter ? '#ff4400'     : (m.special ? '#fff'       : (m.mini ? '#cbf3f0' : (isQuestioned ? '#ff5500' : '#a00018')));
-  const finCol  = isSplitter ? '#881100'     : (m.special ? stype.shadow : (m.mini ? '#5b2c6f' : (isQuestioned ? '#cc3300' : '#5a000c')));
+  const bodyCol = isSplitter ? '#0d0d0d'     : (m.special ? stype.col    : (m.mini ? '#9b59b6' : (isQuestioned ? '#e84000' : '#7a0010')));
+  const noseCol = isSplitter ? '#ff3300'     : (m.special ? '#fff'       : (m.mini ? '#cbf3f0' : (isQuestioned ? '#ff5500' : '#a00018')));
+  const finCol  = isSplitter ? '#cc1100'     : (m.special ? stype.shadow : (m.mini ? '#5b2c6f' : (isQuestioned ? '#cc3300' : '#5a000c')));
 
-  if (isSplitter)        { ctx.shadowColor = '#ff3300'; ctx.shadowBlur = 24; }
+  if (isSplitter)        { ctx.shadowColor = '#ff2200'; ctx.shadowBlur = 32; }
   else if (isQuestioned) { ctx.shadowColor = '#ff6600'; ctx.shadowBlur = 14; }
   else if (m.special)    { ctx.shadowColor = stype.shadow; ctx.shadowBlur = 18; }
 
   ctx.fillStyle = bodyCol;
-  rRect(ctx, -5, -14, 10, 24, 2); ctx.fill();
+  rRect(ctx, -5, -14, 10, 28, 2); ctx.fill();
 
-  // ── Flame markings on splitter body ──
+  // ── Hazard-tape warning stripes on splitter body ──
   if (isSplitter) {
     ctx.save();
-    ctx.beginPath(); rRect(ctx, -5, -14, 10, 24, 2); ctx.clip(); // clip to body
-    const flameBands = [
-      { y: -7, col: '#ff2200' },
-      { y:  1, col: '#ff6600' },
-      { y:  9, col: '#ff2200' },
-    ];
-    flameBands.forEach(({ y, col }) => {
-      ctx.fillStyle = col;
-      ctx.globalAlpha = 0.82;
+    ctx.beginPath(); rRect(ctx, -5, -14, 10, 28, 2); ctx.clip();
+    const stripeW = 5;
+    for (let s = -3; s <= 6; s++) {
+      const sy = s * stripeW * 2;
+      // yellow stripe
+      ctx.fillStyle = '#ffd700';
+      ctx.globalAlpha = 0.88;
       ctx.beginPath();
-      ctx.moveTo(-5, y);
-      ctx.lineTo(5, y - 6);
-      ctx.lineTo(5, y - 2);
-      ctx.lineTo(-5, y + 4);
+      ctx.moveTo(-5, sy - stripeW); ctx.lineTo(5, sy - stripeW * 3);
+      ctx.lineTo(5, sy - stripeW * 3 + stripeW); ctx.lineTo(-5, sy - stripeW + stripeW);
       ctx.closePath(); ctx.fill();
-      // bright inner highlight
-      ctx.fillStyle = '#ffcc00';
-      ctx.globalAlpha = 0.45;
-      ctx.beginPath();
-      ctx.moveTo(-4, y + 1);
-      ctx.lineTo(4, y - 4);
-      ctx.lineTo(4, y - 2);
-      ctx.lineTo(-4, y + 2);
-      ctx.closePath(); ctx.fill();
-    });
+    }
+    // shiny highlight on left edge
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.roundRect(-5, -14, 3, 28, [2, 0, 0, 2]); ctx.fill();
     ctx.globalAlpha = 1;
     ctx.restore();
   }
 
+  // ── Nose (pointier on splitter) ──
   ctx.fillStyle = noseCol;
   ctx.beginPath();
-  ctx.moveTo(0,-23); ctx.lineTo(-5,-14); ctx.lineTo(5,-14);
+  if (isSplitter) {
+    ctx.moveTo(0, -27); ctx.lineTo(-5, -14); ctx.lineTo(5, -14);
+  } else {
+    ctx.moveTo(0, -23); ctx.lineTo(-5, -14); ctx.lineTo(5, -14);
+  }
   ctx.closePath(); ctx.fill();
 
   ctx.fillStyle = finCol;
   [-1, 1].forEach(dx => {
     ctx.beginPath();
-    ctx.moveTo(dx*5, 9); ctx.lineTo(dx*13, 18); ctx.lineTo(dx*5, 13);
+    if (isSplitter) {
+      ctx.moveTo(dx*5, 12); ctx.lineTo(dx*18, 24); ctx.lineTo(dx*5, 17);
+    } else {
+      ctx.moveTo(dx*5, 9); ctx.lineTo(dx*13, 18); ctx.lineTo(dx*5, 13);
+    }
     ctx.closePath(); ctx.fill();
   });
 
