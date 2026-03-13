@@ -1493,6 +1493,8 @@ function startNewGame() {
   doubleScoreTimer = 0; freezeTimer = 0; hintTimer = 0; wrongOnlyTimer = 0; shieldActive = false;
   streak = 0; energy = 0; lasers = []; updateLaserBtn();
   CARD_TYPES.forEach(t => { cards[t] = false; }); updateCardUI();
+  document.getElementById('laser-btn-wrap').style.display = '';
+  document.getElementById('card-slots').style.display    = '';
   specialSpawnTimer = ri(9000, 15000); // first special missile within 9-15 seconds
   if (window.hj) hj('event', `game_start_diff${minMathLvl}`);
   if (gameState === 'PAUSED') {
@@ -1508,6 +1510,14 @@ function startNewGame() {
 
 function endGame(won) {
   gameState = won ? 'WIN' : 'GAME_OVER';
+  // Clear all in-flight objects so nothing renders behind the end screen
+  missiles = []; interceptors = []; floatTexts = []; lasers = [];
+  questionedMissile = null;
+  hideQ();
+  // Hide HUD overlays
+  document.getElementById('laser-btn-wrap').style.display = 'none';
+  document.getElementById('card-slots').style.display    = 'none';
+  CARD_TYPES.forEach(t => { cards[t] = false; });
   if (won) {
     document.getElementById('win-score').textContent = `ניקוד: ${score}`;
     showScreen('win');
