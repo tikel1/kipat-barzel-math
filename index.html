@@ -1191,15 +1191,16 @@ function fireTruck(truck) {
   truck.flashT = 320;
   explosions.push(mkExplosion(truck.x, truck.y - 25, false));
 
-  if (truck.correct) {
+  // wrong_only reverses the rules: shoot a WRONG answer to intercept, correct = miss
+  const hitsTarget = wrongOnlyTimer > 0 ? !truck.correct : truck.correct;
+
+  if (hitsTarget) {
     if (truck.stock <= 0) return;
     truck.stock--;
     beep('correct');
     const ic = mkInterceptor(truck.x, truck.y, questionedMissile, true, truck.x);
     interceptors.push(ic);
   } else {
-    // Wrong answer — blocked if wrongOnlyTimer active
-    if (wrongOnlyTimer > 0) return;
     if (truck.stock <= 0) return;
     truck.stock--;
     beep('wrong');
@@ -1902,21 +1903,34 @@ function drawTruck(t) {
     ctx.fill(); ctx.stroke();
   }
 
-  // ── Wrong-only block overlay (🚫 effect — wrong batteries dimmed with ✗) ──
-  if (wrongOnlyTimer > 0 && !t.correct && gameState === 'QUESTION') {
-    ctx.globalAlpha = 0.72;
-    ctx.fillStyle = 'rgba(180,0,40,0.55)';
-    rRect(ctx, -58, -48, 118, 80, 7);
-    ctx.fill();
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle = '#ff3366';
-    ctx.font = 'bold 28px Rubik, Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.shadowColor = '#cc0033'; ctx.shadowBlur = 12;
-    ctx.fillText('✕', 0, -8);
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = 1;
+  // ── Wrong-only mode: correct battery = blocked (✕), wrong batteries = target (pulse green) ──
+  if (wrongOnlyTimer > 0 && gameState === 'QUESTION') {
+    if (t.correct) {
+      // Correct answer is now OFF-LIMITS — red overlay + ✕
+      ctx.globalAlpha = 0.72;
+      ctx.fillStyle = 'rgba(180,0,40,0.55)';
+      rRect(ctx, -58, -48, 118, 80, 7);
+      ctx.fill();
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = '#ff3366';
+      ctx.font = 'bold 28px Rubik, Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = '#cc0033'; ctx.shadowBlur = 12;
+      ctx.fillText('✕', 0, -8);
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    } else {
+      // Wrong answer is the TARGET — green pulse glow
+      const p = 0.45 + 0.55 * Math.sin(performance.now() * 0.009);
+      ctx.strokeStyle = `rgba(80,255,120,${p})`;
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#44ff88';
+      ctx.shadowBlur = 28 * p;
+      rRect(ctx, -58, -48, 118, 80, 7);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
   }
 
   // ── Hint glow (💡 effect active + this is the correct battery) ──
