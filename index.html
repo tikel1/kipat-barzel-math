@@ -564,7 +564,8 @@
       <button class="card-slot" id="card-freeze"        style="--card-col:#00d4ff" onclick="useCard('freeze')"        title="הקפאת טילים ❄️">❄️</button>
       <button class="card-slot" id="card-hint"          style="--card-col:#ff9900" onclick="useCard('hint')"          title="רמז לסוללה הנכונה 💡">💡</button>
       <button class="card-slot" id="card-swap_question" style="--card-col:#b044ff" onclick="useCard('swap_question')" title="החלפת שאלה 🔄">🔄</button>
-      <button class="card-slot" id="card-wrong_only"    style="--card-col:#e03060" onclick="useCard('wrong_only')"    title="חסום תשובות שגויות 🚫">🚫</button>
+      <button class="card-slot" id="card-wrong_only"    style="--card-col:#e03060" onclick="useCard('wrong_only')"    title="רק תשובות לא נכונות 🚫">🚫</button>
+      <button class="card-slot" id="card-restock"       style="--card-col:#44dd88" onclick="useCard('restock')"       title="הצטיידות מחדש 🔋">🔋</button>
     </div>
 
     <!-- Level-up banner -->
@@ -650,7 +651,7 @@ const SPECIAL_TYPES = {
   shield:        { col: '#d0d0e0', shadow: '#888899', label: 'מגן מפגיעה אחת 🛡'            },
   hint:          { col: '#ff9900', shadow: '#994400', label: 'כרטיס רמז 💡'                 },
   swap_question: { col: '#b044ff', shadow: '#6600cc', label: 'כרטיס החלפת שאלה 🔄'         },
-  wrong_only:    { col: '#e03060', shadow: '#880022', label: 'כרטיס רק שגויות 🚫'           },
+  wrong_only:    { col: '#e03060', shadow: '#880022', label: 'כרטיס רק תשובות לא נכונות 🚫' },
   restock:       { col: '#44dd88', shadow: '#1a7740', label: 'הצטיידות מחדש 🔋'              },
 };
 
@@ -718,8 +719,8 @@ const MAX_ENERGY = 100;
 let lasers     = []; // [{x1,y1,x2,y2,alpha,elapsed}]
 
 // ── Power cards ──
-const CARD_TYPES = ['freeze', 'hint', 'swap_question', 'wrong_only'];
-const cards = { freeze: false, hint: false, swap_question: false, wrong_only: false };
+const CARD_TYPES = ['freeze', 'hint', 'swap_question', 'wrong_only', 'restock'];
+const cards = { freeze: false, hint: false, swap_question: false, wrong_only: false, restock: false };
 
 let missiles        = [];
 let questionedMissile = null;
@@ -1310,18 +1311,13 @@ function applySpecialEffect(type, lx) {
     case 'hint':
     case 'swap_question':
     case 'wrong_only':
+    case 'restock':
       giveCard(type);
       break;
     case 'shield':
       shieldActive = true;
       addFloat('🛡 מגן פעיל!', lx, TRUCK_Y - 72, '#d0d0e0');
       showPowerBanner('🛡 מגן', '#d0d0e0');
-      break;
-    case 'restock':
-      trucks.forEach(t => { t.stock = Math.min(t.stock + 3, STOCK_MAX); });
-      addFloat('🔋 +3 טילים!', W / 2, H * 0.38, '#44dd88');
-      showPowerBanner('🔋 הצטיידות מחדש', '#44dd88');
-      updateHUD();
       break;
   }
 }
@@ -1335,9 +1331,9 @@ function giveCard(type) {
   }
   cards[type] = true;
   updateCardUI();
-  const icons  = { freeze: '❄️', hint: '💡', swap_question: '🔄', wrong_only: '🚫' };
-  const names  = { freeze: 'הקפאה', hint: 'רמז', swap_question: 'החלפת שאלה', wrong_only: 'רק שגויות' };
-  const cols   = { freeze: '#00d4ff', hint: '#ff9900', swap_question: '#b044ff', wrong_only: '#e03060' };
+  const icons  = { freeze: '❄️', hint: '💡', swap_question: '🔄', wrong_only: '🚫', restock: '🔋' };
+  const names  = { freeze: 'הקפאה', hint: 'רמז', swap_question: 'החלפת שאלה', wrong_only: 'רק תשובות לא נכונות', restock: 'הצטיידות' };
+  const cols   = { freeze: '#00d4ff', hint: '#ff9900', swap_question: '#b044ff', wrong_only: '#e03060', restock: '#44dd88' };
   const ic = icons[type], nm = names[type], col = cols[type];
   addFloat(`${ic} ${nm}`, W / 2, H * 0.38, col);
   showPowerBanner(`${ic} ${nm}`, col);
@@ -1370,6 +1366,12 @@ function activateCardEffect(type) {
       wrongOnlyTimer = 10000;
       addFloat('🚫 רק תשובות לא נכונות!', W / 2, H * 0.38, '#e03060');
       showPowerBanner('🚫 רק תשובות לא נכונות', '#e03060');
+      break;
+    case 'restock':
+      trucks.forEach(t => { t.stock = Math.min(t.stock + 3, STOCK_MAX); });
+      addFloat('🔋 +3 טילים!', W / 2, H * 0.38, '#44dd88');
+      showPowerBanner('🔋 +3', '#44dd88');
+      updateHUD();
       break;
   }
 }
@@ -1616,7 +1618,7 @@ function drawEffects() {
   if (freezeTimer      > 0) indicators.push({ icon: '❄️', label: 'הקפאה',    col: '#00d4ff', t: freezeTimer / 12000,      timeMs: freezeTimer });
   if (shieldActive)          indicators.push({ icon: '🛡', label: 'מגן',      col: '#d0d0e0', t: 1,                        timeMs: 0 });
   if (hintTimer        > 0) indicators.push({ icon: '💡', label: 'רמז',      col: '#ff9900', t: hintTimer / 6000,          timeMs: hintTimer });
-  if (wrongOnlyTimer   > 0) indicators.push({ icon: '🚫', label: 'רק שגויות', col: '#e03060', t: wrongOnlyTimer / 10000,   timeMs: wrongOnlyTimer });
+  if (wrongOnlyTimer   > 0) indicators.push({ icon: '🚫', label: 'רק לא נכונות', col: '#e03060', t: wrongOnlyTimer / 10000, timeMs: wrongOnlyTimer });
   if (!indicators.length) return;
 
   const barW = 82, barH = 16, pad = 6;
@@ -1723,16 +1725,26 @@ function drawWrongOnlyLabel() {
   if (wrongOnlyTimer <= 0) return;
   if (gameState !== 'PLAYING' && gameState !== 'QUESTION') return;
   const now   = performance.now();
-  const pulse = 0.8 + 0.2 * Math.sin(now * 0.005);
+  const secs  = Math.ceil(wrongOnlyTimer / 1000);
+  const pulse = 0.82 + 0.18 * Math.sin(now * 0.005);
+  const urgnt = secs <= 3;
   ctx.save();
-  ctx.globalAlpha  = pulse;
-  ctx.font         = 'bold 13px Rubik, Arial';
-  ctx.textAlign    = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle    = '#e03060';
-  ctx.shadowColor  = '#e03060';
-  ctx.shadowBlur   = 10;
-  ctx.fillText('🚫 רק תשובות לא נכונות', W / 2, H - 52);
+  ctx.globalAlpha = pulse;
+  ctx.textAlign   = 'center';
+  // label text
+  ctx.font        = 'bold 13px Rubik, Arial';
+  ctx.textBaseline = 'bottom';
+  ctx.fillStyle   = '#e03060';
+  ctx.shadowColor = '#e03060';
+  ctx.shadowBlur  = 10;
+  ctx.fillText('🚫 רק תשובות לא נכונות', W / 2, H - 58);
+  // countdown
+  ctx.font        = `bold ${urgnt ? 22 : 18}px Rubik, Arial`;
+  ctx.textBaseline = 'top';
+  ctx.fillStyle   = urgnt ? '#ff2255' : '#e03060';
+  ctx.shadowColor = urgnt ? '#ff2255' : '#e03060';
+  ctx.shadowBlur  = urgnt ? 18 : 8;
+  ctx.fillText(`${secs}`, W / 2, H - 56);
   ctx.shadowBlur = 0;
   ctx.restore();
 }
