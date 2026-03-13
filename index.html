@@ -803,32 +803,36 @@ function genQuestion(lvl) {
     }
 
   } else if (lvl === 3) {
-    // קשה: כפל/חילוק 1–20. one factor scales 5→20, other stays 2–20
-    const mf = Math.round(5 + scale * 15);            // scaled factor: 5 → 20
+    // קשה: כפל/חילוק 1–20.
+    // Multiplication: both factors scale, one at full rate, one at half rate (flip picks which)
+    const mfFull = Math.round(5 + scale * 15);        // 5 → 20
+    const mfHalf = Math.round(5 + scale * 7.5);       // 5 → 12 (half effect)
     if (Math.random() < 0.5) {
       op = '×';
-      a = flip ? ri(2, mf) : ri(2, 20);
-      b = flip ? ri(2, 20) : ri(2, mf);
+      a = ri(2, flip ? mfFull : mfHalf);
+      b = ri(2, flip ? mfHalf : mfFull);
       ans = a * b;
     } else {
-      const mfQ = flip ? mf : 20;                     // quotient range
-      const mfD = flip ? 20 : mf;                     // divisor range
+      const mfQ = flip ? mfFull : mfHalf;
+      const mfD = flip ? mfHalf : mfFull;
       ans = ri(1, mfQ); b = ri(2, mfD); a = ans * b; op = '÷';
     }
 
   } else {
-    // טירוף: כפל/חילוק עד 50. one factor scales 10→50
-    const mf = Math.round(10 + scale * 40);           // scaled: 10 → 50
+    // טירוף: כפל/חילוק עד 50.
+    // Multiplication: both factors scale, one at full rate, one at half rate
+    const mfFull = Math.round(10 + scale * 40);       // 10 → 50
+    const mfHalf = Math.round(10 + scale * 20);       // 10 → 30 (half effect)
     if (Math.random() < 0.5) {
       op = '×';
       do {
-        a = flip ? ri(2, mf) : ri(2, 50);
-        b = flip ? ri(2, 50) : ri(2, mf);
+        a = ri(2, flip ? mfFull : mfHalf);
+        b = ri(2, flip ? mfHalf : mfFull);
       } while (a * b > 999);
       ans = a * b;
     } else {
-      const mfQ = flip ? mf : 20;
-      const mfD = flip ? 20 : mf;
+      const mfQ = flip ? mfFull : mfHalf;
+      const mfD = flip ? mfHalf : mfFull;
       do { ans = ri(2, mfQ); b = ri(2, mfD); a = ans * b; } while (a > 999);
       op = '÷';
     }
