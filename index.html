@@ -651,6 +651,7 @@ const SPECIAL_TYPES = {
   hint:          { col: '#ff9900', shadow: '#994400', label: 'כרטיס רמז 💡'                 },
   swap_question: { col: '#b044ff', shadow: '#6600cc', label: 'כרטיס החלפת שאלה 🔄'         },
   wrong_only:    { col: '#e03060', shadow: '#880022', label: 'כרטיס רק שגויות 🚫'           },
+  restock:       { col: '#44dd88', shadow: '#1a7740', label: 'הצטיידות מחדש 🔋'              },
 };
 
 // Infinite wave config — escalates smoothly over 40 waves then stays maxed
@@ -1315,6 +1316,12 @@ function applySpecialEffect(type, lx) {
       shieldActive = true;
       addFloat('🛡 מגן פעיל!', lx, TRUCK_Y - 72, '#d0d0e0');
       showPowerBanner('🛡 מגן', '#d0d0e0');
+      break;
+    case 'restock':
+      trucks.forEach(t => { t.stock = Math.min(t.stock + 3, STOCK_MAX); });
+      addFloat('🔋 +3 טילים!', W / 2, H * 0.38, '#44dd88');
+      showPowerBanner('🔋 הצטיידות מחדש', '#44dd88');
+      updateHUD();
       break;
   }
 }
