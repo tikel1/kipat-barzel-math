@@ -761,43 +761,58 @@ const CLOUDS = [
 //  MATH ENGINE
 // ═══════════════════════════════════════════════════════════
 function genQuestion(lvl) {
-  // scale: 0 at wave 1 → 1 at wave 11+.  Only ONE operand scales; the other stays at
-  // full range so questions are never trivially easy from the start.
+  // scale: 0 at wave 1 → 1 at wave 11+. Only ONE operand scales.
   const scale = Math.min((wave - 1) / 10, 1);
   let a, b, op, ans;
 
   if (lvl === 1) {
-    // מתחיל: a always up to 40; b scales 8→25 (sum grows from ~48 to ~65 → capped at 50)
-    const mxB = Math.round(8 + scale * 17);           // 8 → 25
+    // מתחיל: חיבור/חיסור. a always 1–40; b scales 5→25, result 1–50
+    const mxB = Math.round(5 + scale * 20);           // 5 → 25
     op = Math.random() < 0.5 ? '+' : '−';
-    if (op === '+') { a = ri(1, 40); b = ri(1, Math.min(mxB, 50 - a)); ans = a + b; }
-    else            { a = ri(mxB + 2, 50); b = ri(1, mxB); ans = a - b; }
+    if (op === '+') {
+      a = ri(1, 40);
+      b = ri(1, Math.max(1, Math.min(mxB, 50 - a)));
+      ans = a + b;
+    } else {
+      b = ri(1, mxB);
+      a = ri(b + 1, Math.max(b + 1, 50));              // a > b always → ans ≥ 1
+      ans = a - b;
+    }
 
   } else if (lvl === 2) {
-    // מתקדם: a always up to 170; b scales 15→80
-    const mxB = Math.round(15 + scale * 65);          // 15 → 80
+    // מתקדם: חיבור/חיסור. a always 10–170; b scales 10→80, result ≤ 200
+    const mxB = Math.round(10 + scale * 70);          // 10 → 80
     op = Math.random() < 0.5 ? '+' : '−';
-    if (op === '+') { a = ri(10, 170); b = ri(5, Math.min(mxB, 200 - a)); ans = a + b; }
-    else            { a = ri(mxB + 5, 198); b = ri(5, mxB); ans = a - b; }
+    if (op === '+') {
+      a = ri(10, 170);
+      b = ri(5, Math.max(5, Math.min(mxB, 200 - a)));
+      ans = a + b;
+    } else {
+      b = ri(5, mxB);
+      a = ri(b + 5, Math.max(b + 5, 198));            // a > b always
+      ans = a - b;
+    }
 
   } else if (lvl === 3) {
-    // קשה: a always 2–10; b (second factor) scales 5→10
-    const mfB = Math.round(5 + scale * 5);            // 5 → 10
+    // קשה: כפל/חילוק עד 20. a always 2–20; b scales 5→20
+    const mfB = Math.round(5 + scale * 15);           // 5 → 20
     if (Math.random() < 0.5) {
-      op = '×'; a = ri(2, 10); b = ri(2, mfB); ans = a * b;
+      op = '×'; a = ri(2, 20); b = ri(2, mfB); ans = a * b;
     } else {
-      b = ri(2, mfB); ans = ri(1, 10); a = ans * b; op = '÷';
+      b = ri(2, mfB); ans = ri(1, 20); a = ans * b; op = '÷';
     }
 
   } else {
-    // טירוף: a always 2–50; b scales 10→50
+    // טירוף: כפל/חילוק עד 50. a always 2–50; b scales 10→50; product ≤ 999
     const mfB = Math.round(10 + scale * 40);          // 10 → 50
     if (Math.random() < 0.5) {
       op = '×';
       do { a = ri(2, 50); b = ri(2, mfB); } while (a * b > 999);
       ans = a * b;
     } else {
-      b = ri(2, mfB); ans = ri(2, 30); a = ans * b; op = '÷';
+      // division: build from result so quotient is always a whole number
+      do { ans = ri(2, 20); b = ri(2, mfB); a = ans * b; } while (a > 999);
+      op = '÷';
     }
   }
   return { text: `${a} ${op} ${b} = ?`, ans };
