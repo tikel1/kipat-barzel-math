@@ -597,7 +597,7 @@
             מתקדם<small>חיבור וחיסור עד 200</small>
           </button>
           <button class="level-btn" data-level="3">
-            קשה<small>כפל וחילוק 1–10</small>
+            קשה<small>כפל וחילוק 1–20</small>
           </button>
           <button class="level-btn" data-level="4">
             טירוף<small>כפל וחילוק 1–50</small>
@@ -765,53 +765,71 @@ function genQuestion(lvl) {
   const scale = Math.min((wave - 1) / 10, 1);
   let a, b, op, ans;
 
+  // flip: randomly decide which operand carries the scale (varies question variety)
+  const flip = Math.random() < 0.5;
+
   if (lvl === 1) {
-    // מתחיל: חיבור/חיסור. a always 1–40; b scales 5→25, result 1–50
-    const mxB = Math.round(5 + scale * 20);           // 5 → 25
+    // מתחיל: חיבור/חיסור עד 50. one operand scales 5→25, other stays full range
+    const mx  = Math.round(5 + scale * 20);           // scaled side: 5 → 25
+    const mxF = 40;                                   // fixed side
     op = Math.random() < 0.5 ? '+' : '−';
     if (op === '+') {
-      a = ri(1, 40);
-      b = ri(1, Math.max(1, Math.min(mxB, 50 - a)));
+      a = flip ? ri(1, mx)  : ri(1, mxF);
+      b = flip ? ri(1, mxF) : ri(1, mx);
+      b = Math.min(b, Math.max(1, 50 - a));
       ans = a + b;
     } else {
-      b = ri(1, mxB);
-      a = ri(b + 1, Math.max(b + 1, 50));              // a > b always → ans ≥ 1
+      const big = flip ? ri(mx + 1, 50) : ri(mxF + 1, 50);
+      const sml = flip ? ri(1, mx)      : ri(1, mxF);
+      a = Math.max(big, sml + 1); b = Math.min(sml, a - 1);
       ans = a - b;
     }
 
   } else if (lvl === 2) {
-    // מתקדם: חיבור/חיסור. a always 10–170; b scales 10→80, result ≤ 200
-    const mxB = Math.round(10 + scale * 70);          // 10 → 80
+    // מתקדם: חיבור/חיסור עד 200. one operand scales 10→80
+    const mx  = Math.round(10 + scale * 70);          // scaled: 10 → 80
+    const mxF = 170;                                  // fixed
     op = Math.random() < 0.5 ? '+' : '−';
     if (op === '+') {
-      a = ri(10, 170);
-      b = ri(5, Math.max(5, Math.min(mxB, 200 - a)));
+      a = flip ? ri(5, mx)   : ri(10, mxF);
+      b = flip ? ri(10, mxF) : ri(5, mx);
+      b = Math.min(b, Math.max(5, 200 - a));
       ans = a + b;
     } else {
-      b = ri(5, mxB);
-      a = ri(b + 5, Math.max(b + 5, 198));            // a > b always
+      const big = flip ? ri(mx + 5, 198)  : ri(mxF + 5, 198);
+      const sml = flip ? ri(5, mx)        : ri(5, mxF);
+      a = Math.max(big, sml + 5); b = Math.min(sml, a - 5);
       ans = a - b;
     }
 
   } else if (lvl === 3) {
-    // קשה: כפל/חילוק עד 20. a always 2–20; b scales 5→20
-    const mfB = Math.round(5 + scale * 15);           // 5 → 20
+    // קשה: כפל/חילוק 1–20. one factor scales 5→20, other stays 2–20
+    const mf = Math.round(5 + scale * 15);            // scaled factor: 5 → 20
     if (Math.random() < 0.5) {
-      op = '×'; a = ri(2, 20); b = ri(2, mfB); ans = a * b;
+      op = '×';
+      a = flip ? ri(2, mf) : ri(2, 20);
+      b = flip ? ri(2, 20) : ri(2, mf);
+      ans = a * b;
     } else {
-      b = ri(2, mfB); ans = ri(1, 20); a = ans * b; op = '÷';
+      const mfQ = flip ? mf : 20;                     // quotient range
+      const mfD = flip ? 20 : mf;                     // divisor range
+      ans = ri(1, mfQ); b = ri(2, mfD); a = ans * b; op = '÷';
     }
 
   } else {
-    // טירוף: כפל/חילוק עד 50. a always 2–50; b scales 10→50; product ≤ 999
-    const mfB = Math.round(10 + scale * 40);          // 10 → 50
+    // טירוף: כפל/חילוק עד 50. one factor scales 10→50
+    const mf = Math.round(10 + scale * 40);           // scaled: 10 → 50
     if (Math.random() < 0.5) {
       op = '×';
-      do { a = ri(2, 50); b = ri(2, mfB); } while (a * b > 999);
+      do {
+        a = flip ? ri(2, mf) : ri(2, 50);
+        b = flip ? ri(2, 50) : ri(2, mf);
+      } while (a * b > 999);
       ans = a * b;
     } else {
-      // division: build from result so quotient is always a whole number
-      do { ans = ri(2, 20); b = ri(2, mfB); a = ans * b; } while (a > 999);
+      const mfQ = flip ? mf : 20;
+      const mfD = flip ? 20 : mf;
+      do { ans = ri(2, mfQ); b = ri(2, mfD); a = ans * b; } while (a > 999);
       op = '÷';
     }
   }
