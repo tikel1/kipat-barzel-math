@@ -1221,7 +1221,10 @@ function onIntercepted(missile, ex, ey, truckX) {
     if (doubleScoreTimer > 0) pts *= 2;
     score += pts;
     addFloat(`+${pts}`, ex, ey - 10, '#ff5500');
-    showPowerBanner('🔥 הטיל השמן מתפצל! יירט את השניים!', '#ff5500');
+    showPowerBanner('🔥 מתפצל!', '#ff5500');
+    streak++;
+    if (streak >= 3) addFloat(`🔥×${streak}`, ex, ey - 30, streak >= 7 ? '#ffd700' : '#ff8c00');
+    addEnergy(Math.min(3 + streak * 1.5, 18));
     resolved++;
     spawnSplitMissiles(ex, ey);
     updateHUD();
@@ -1236,6 +1239,9 @@ function onIntercepted(missile, ex, ey, truckX) {
     score += pts;
     const st = SPECIAL_TYPES[missile.specialType];
     addFloat(`+${pts}`, ex, ey - 10, st.col);
+    streak++;
+    if (streak >= 3) addFloat(`🔥×${streak}`, ex, ey - 30, streak >= 7 ? '#ffd700' : '#ff8c00');
+    addEnergy(Math.min(3 + streak * 1.5, 18));
     applySpecialEffect(missile.specialType, lx);
     updateHUD();
     promoteNextQuestioned();
@@ -1290,13 +1296,13 @@ function applySpecialEffect(type, lx) {
     case 'double_score':
       doubleScoreTimer = 20000;
       addFloat('★ ניקוד כפול פעיל!', W / 2, H * 0.38, '#ffd700');
-      showPowerBanner('★ ניקוד כפול ל-20 שניות!', '#ffd700');
+      showPowerBanner('★ ניקוד ×2', '#ffd700');
       break;
     case 'extra_life':
       lives = Math.min(lives + 1, 6);
       updateHUD();
       addFloat('❤ +1 חיים!', lx, TRUCK_Y - 72, '#ff69b4');
-      showPowerBanner('❤ קיבלת חיים נוספים!', '#ff69b4');
+      showPowerBanner('❤ +1', '#ff69b4');
       break;
     case 'freeze':
     case 'hint':
@@ -1307,7 +1313,7 @@ function applySpecialEffect(type, lx) {
     case 'shield':
       shieldActive = true;
       addFloat('🛡 מגן פעיל!', lx, TRUCK_Y - 72, '#d0d0e0');
-      showPowerBanner('🛡 מגן מפגיעה אחת פעיל!', '#d0d0e0');
+      showPowerBanner('🛡 מגן', '#d0d0e0');
       break;
   }
 }
@@ -1325,20 +1331,20 @@ function giveCard(type) {
   const names  = { freeze: 'הקפאה', hint: 'רמז', swap_question: 'החלפת שאלה', wrong_only: 'רק שגויות' };
   const cols   = { freeze: '#00d4ff', hint: '#ff9900', swap_question: '#b044ff', wrong_only: '#e03060' };
   const ic = icons[type], nm = names[type], col = cols[type];
-  addFloat(`${ic} כרטיס ${nm}!`, W / 2, H * 0.38, col);
-  showPowerBanner(`${ic} קיבלת כרטיס ${nm} — לחץ כדי להפעיל!`, col);
+  addFloat(`${ic} ${nm}`, W / 2, H * 0.38, col);
+  showPowerBanner(`${ic} ${nm}`, col);
 }
 
 function activateCardEffect(type) {
   switch (type) {
     case 'freeze':
       freezeTimer = 12000;
-      addFloat('❄ הקפאה!', W / 2, H * 0.38, '#00d4ff');
-      showPowerBanner('❄ הקפאת טילים ל-12 שניות!', '#00d4ff');
+      addFloat('❄️ הקפאה!', W / 2, H * 0.38, '#00d4ff');
+      showPowerBanner('❄️ הקפאה', '#00d4ff');
       break;
     case 'hint':
       hintTimer = 6000;
-      showPowerBanner('💡 רמז פעיל — הסוללה הנכונה תהבהב!', '#ff9900');
+      showPowerBanner('💡 רמז', '#ff9900');
       break;
     case 'swap_question':
       if (!questionedMissile) {
@@ -1350,12 +1356,12 @@ function activateCardEffect(type) {
       assignAnswers(newQ);
       showQ(newQ.text);
       addFloat('🔄 שאלה חדשה!', W / 2, H * 0.38, '#b044ff');
-      showPowerBanner('🔄 השאלה הוחלפה!', '#b044ff');
+      showPowerBanner('🔄 שאלה חדשה', '#b044ff');
       break;
     case 'wrong_only':
       wrongOnlyTimer = 10000;
-      addFloat('🚫 רק שגויות!', W / 2, H * 0.38, '#e03060');
-      showPowerBanner('🚫 רק תשובות שגויות נחסמות ל-10 שניות!', '#e03060');
+      addFloat('🚫 שגויות חסומות!', W / 2, H * 0.38, '#e03060');
+      showPowerBanner('🚫 שגויות חסומות', '#e03060');
       break;
   }
 }
@@ -2245,7 +2251,11 @@ function activateLaser() {
     let pts = 70 * (doubleScoreTimer > 0 ? 2 : 1);
     score += pts;
     addFloat(`+${pts}`, m.x, m.y - 10, '#00dcff');
-    if (!m.special) resolved++;   // count regular & splitter toward wave
+    if (m.special) {
+      applySpecialEffect(m.specialType, m.x); // give card / apply power
+    } else {
+      resolved++; // count regular, splitter, mini toward wave
+    }
   });
 
   // Clear game question state
