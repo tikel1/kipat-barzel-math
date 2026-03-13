@@ -1567,10 +1567,11 @@ function endGame(won) {
   missiles = []; interceptors = []; floatTexts = []; lasers = [];
   questionedMissile = null;
   hideQ();
+  energy = 0; streak = 0; updateLaserBtn();      // strip ready/pulse state before hiding
+  CARD_TYPES.forEach(t => { cards[t] = false; }); updateCardUI();
   // Hide HUD overlays
   document.getElementById('laser-btn-wrap').style.display = 'none';
   document.getElementById('card-slots').style.display    = 'none';
-  CARD_TYPES.forEach(t => { cards[t] = false; });
   if (won) {
     document.getElementById('win-score').textContent = `ניקוד: ${score}`;
     showScreen('win');
