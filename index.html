@@ -761,40 +761,45 @@ const CLOUDS = [
 //  MATH ENGINE
 // ═══════════════════════════════════════════════════════════
 function genQuestion(lvl) {
-  // lvl is fixed to user's chosen difficulty — no cross-level escalation
+  // scale: 0 at wave 1 → 1 at wave 16+  (gradual ramp-up of number ranges)
+  const scale = Math.min((wave - 1) / 15, 1);
   let a, b, op, ans;
+
   if (lvl === 1) {
-    // מתחיל: חיבור וחיסור עד 50
+    // מתחיל: start up to 15, grow to 50
+    const mx = Math.round(15 + scale * 35);          // 15 → 50
     op = Math.random() < 0.5 ? '+' : '−';
-    if (op === '+') { a = ri(1,40); b = ri(1, 50-a); ans = a+b; }
-    else            { a = ri(6,50); b = ri(1, a-1);  ans = a-b; }
+    if (op === '+') { a = ri(1, Math.max(1, mx - 2)); b = ri(1, mx - a); ans = a + b; }
+    else            { a = ri(4, mx);                  b = ri(1, a - 1);  ans = a - b; }
+
   } else if (lvl === 2) {
-    // מתקדם: חיבור וחיסור עד 200
+    // מתקדם: start up to 60, grow to 200
+    const mx = Math.round(60 + scale * 140);          // 60 → 200
     op = Math.random() < 0.5 ? '+' : '−';
-    if (op === '+') { a = ri(10,170); b = ri(5, 200-a); ans = a+b; }
-    else            { a = ri(20,198); b = ri(5, a-5);   ans = a-b; }
+    if (op === '+') { a = ri(5, Math.max(5, mx - 10)); b = ri(5, mx - a); ans = a + b; }
+    else            { a = ri(15, mx);                  b = ri(5, Math.max(5, a - 5)); ans = a - b; }
+
   } else if (lvl === 3) {
-    // קשה: כפל וחילוק 1-10
+    // קשה: start ×2–3, grow to ×10
+    const mf = Math.round(3 + scale * 7);             // 3 → 10
     if (Math.random() < 0.5) {
-      op = '×'; a = ri(2,10); b = ri(2,10); ans = a*b;
+      op = '×'; a = ri(2, mf); b = ri(2, mf); ans = a * b;
     } else {
-      ans = ri(1,10); b = ri(2,10); a = ans*b;
-      op = '÷';
+      ans = ri(1, mf); b = ri(2, mf); a = ans * b; op = '÷';
     }
+
   } else {
-    // טירוף: כפל וחילוק — מספרים 1-50, תשובה ≤ 999
+    // טירוף: start ×10, grow to ×50
+    const mf = Math.round(10 + scale * 40);           // 10 → 50
     if (Math.random() < 0.5) {
       op = '×';
-      // Retry until product ≤ 999 (keeps operands in 1-50 range)
-      do { a = ri(2,50); b = ri(2,50); } while (a * b > 999);
+      do { a = ri(2, mf); b = ri(2, mf); } while (a * b > 999);
       ans = a * b;
     } else {
-      // ÷: pick quotient and divisor so dividend (a) ≤ 999
-      ans = ri(2,30); b = ri(2,30); a = ans * b;
-      op = '÷';
+      ans = ri(2, Math.min(mf, 30)); b = ri(2, mf); a = ans * b; op = '÷';
     }
   }
-  return {text: `${a} ${op} ${b} = ?`, ans};
+  return { text: `${a} ${op} ${b} = ?`, ans };
 }
 
 function wrongAnswers(correct) {
