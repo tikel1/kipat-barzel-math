@@ -1048,6 +1048,12 @@ function mkExplosion(x, y, big) {
   };
 }
 
+// ── Analytics helper ─────────────────────────────────────────────────────────
+function track(name) {
+  if (window.hj)      hj('event', name);
+  if (window.clarity) clarity('event', name);
+}
+
 function addFloat(text, x, y, col) {
   floatTexts.push({text, x, y, vy:-1.3, alpha:1, col: col||'#ffd700'});
 }
@@ -1324,6 +1330,7 @@ function fireTruck(truck) {
     truck.shakeT = 420;
     streak = 0;
     questionedMissile.wrongFires++;
+    track(`wrong_answer_w${wave}`);
     showMiss();
     const ic = mkInterceptor(truck.x, truck.y, questionedMissile, false);
     interceptors.push(ic);
@@ -1361,6 +1368,7 @@ function onIntercepted(missile, ex, ey, truckX) {
     if (streak >= 3) addFloat(`🔥×${streak}`, ex, ey - 30, streak >= 7 ? '#ffd700' : '#ff8c00');
     addEnergy(Math.min(3 + streak * 1.5, 18));
     applySpecialEffect(missile.specialType, lx);
+    track(`special_caught_${missile.specialType}_w${wave}`);
     triggerBlastSplash(ex, ey);
     updateHUD();
     promoteNextQuestioned();
@@ -1396,6 +1404,7 @@ function onIntercepted(missile, ex, ey, truckX) {
   addFloat(speedLabel, lx, TRUCK_Y - 72, labelCol);
   streak++;
   if (streak >= 3) addFloat(`🔥×${streak}`, ex, ey - 30, streak >= 7 ? '#ffd700' : '#ff8c00');
+  if ([5, 10, 15, 20].includes(streak)) track(`streak_${streak}`);
   addEnergy(Math.min(3 + streak * 1.5, 18));
   resolved++;
   triggerBlastSplash(ex, ey);
@@ -1409,7 +1418,7 @@ function onIntercepted(missile, ex, ey, truckX) {
     spawned++;
     spawnTimer = getWaveCfg(wave).ms;
   }
-  if (window.hj) hj('event', `intercept_${elapsed < 5 ? 'fast' : elapsed < 12 ? 'good' : 'last'}`);
+  track(`intercept_${elapsed < 5 ? 'fast' : elapsed < 12 ? 'good' : 'last'}`);
 }
 
 function applySpecialEffect(type, lx) {
@@ -1449,7 +1458,7 @@ function applySpecialEffect(type, lx) {
       shieldActive = true;
       addFloat('🃏 ג\'וקר — הכל!', W / 2, H * 0.35, '#ffffff');
       showPowerBanner('🃏 כל הכוחות!', '#ffffff');
-      if (window.hj) hj('event', `joker_w${wave}`);
+      track(`joker_w${wave}`);
       break;
   }
 }
@@ -1463,6 +1472,7 @@ function giveCard(type) {
   }
   cards[type] = true;
   updateCardUI();
+  track(`card_earned_${type}`);
   const icons  = { freeze: '❄️', hint: '💡', swap_question: '🔄', wrong_only: '🚫', restock: '🔋', blast: '💥' };
   const names  = { freeze: 'הקפאה', hint: 'רמז', swap_question: 'החלפת שאלה', wrong_only: 'רק תשובות לא נכונות', restock: 'הצטיידות', blast: 'מגה פיצוץ' };
   const cols   = { freeze: '#00d4ff', hint: '#ff9900', swap_question: '#b044ff', wrong_only: '#e03060', restock: '#44dd88', blast: '#cc44ff' };
@@ -1520,7 +1530,7 @@ function useCard(type) {
   cards[type] = false;
   updateCardUI();
   activateCardEffect(type);
-  if (window.hj) hj('event', `card_used_${type}`);
+  track(`card_used_${type}`);
 }
 
 function updateCardUI() {
@@ -1583,7 +1593,7 @@ function missileHit(missile) {
     } else {
       lives--;
       damageFlash = 500;
-      if (window.hj) hj('event', `life_lost_w${wave}_lives${lives}`);
+      track(`life_lost_w${wave}_lives${lives}`);
     }
     updateHUD();
     if (lives <= 0) { waveActive = false; setTimeout(() => endGame(false), 800); }
@@ -1603,7 +1613,7 @@ function missileHit(missile) {
     } else {
       lives--;
       damageFlash = 700;
-      if (window.hj) hj('event', `life_lost_w${wave}_lives${lives}`);
+      track(`life_lost_w${wave}_lives${lives}`);
     }
     updateHUD();
     if (wasQuestioned) promoteNextQuestioned();
@@ -1622,7 +1632,7 @@ function missileHit(missile) {
   } else {
     lives--;
     damageFlash = 700;
-    if (window.hj) hj('event', `life_lost_w${wave}_lives${lives}`);
+    track(`life_lost_w${wave}_lives${lives}`);
   }
   updateHUD();
   if (wasQuestioned) promoteNextQuestioned();
@@ -1639,11 +1649,11 @@ function onWaveComplete() {
     updateHUD();
     bannerTitle = `🎉 גל ${wave} הושלם!`;
     bannerSub   = `❤ קיבלתם חיים נוספים — המשיכו!`;
-    if (window.hj) hj('event', `milestone_wave_${wave}`);
+    track(`milestone_wave_${wave}`);
   }
 
   showBanner(bannerTitle, bannerSub);
-  if (window.hj) hj('event', `wave_${wave}_diff${minMathLvl}`);
+  track(`wave_${wave}_diff${minMathLvl}`);
   setTimeout(() => {
     hideBanner();
     wave = nextWave;
@@ -1686,7 +1696,8 @@ function startNewGame() {
   document.getElementById('laser-btn-wrap').style.display = '';
   document.getElementById('card-slots').style.display    = '';
   refillSpecialBag(); // fresh shuffled deck on each new game
-  if (window.hj) hj('event', `game_start_diff${minMathLvl}`);
+  track(`game_start_diff${minMathLvl}`);
+  if (window.clarity) { clarity('set', 'difficulty', String(minMathLvl)); }
   if (gameState === 'PAUSED') {
     document.getElementById('pause-overlay').classList.add('hidden');
     document.getElementById('btn-pause').classList.remove('paused');
@@ -1717,7 +1728,8 @@ function endGame(won) {
     document.getElementById('gameover-score').textContent = `ניקוד: ${score}`;
     showScreen('gameover');
   }
-  if (window.hj) hj('event', `game_over_wave${wave}_score${score}_diff${minMathLvl}`);
+  track(`game_over_wave${wave}_score${score}_diff${minMathLvl}`);
+  if (window.clarity) { clarity('set', 'max_wave', String(wave)); clarity('set', 'final_score', String(score)); }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2544,7 +2556,7 @@ function activateLaser() {
 
   const targets = missiles.filter(m => m.active);
   if (targets.length === 0) return;
-  if (window.hj) hj('event', `laser_w${wave}_cnt${targets.length}`);
+  track(`laser_w${wave}_cnt${targets.length}`);
 
   // Fire laser beams from each truck to each target
   trucks.forEach(truck => {
@@ -2692,7 +2704,7 @@ document.querySelectorAll('.level-btn').forEach(btn => {
     minMathLvl = parseInt(btn.dataset.level);
     document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    if (window.hj) hj('event', `difficulty_selected_${minMathLvl}`);
+    track(`difficulty_selected_${minMathLvl}`);
   });
 });
 
