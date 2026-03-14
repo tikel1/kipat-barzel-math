@@ -62,6 +62,19 @@
       transform-origin: top left;
     }
 
+    /* Hotjar truck-answer spans — invisible DOM mirrors of canvas numbers */
+    .hj-truck-ans {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+      font: bold 18px 'Rubik', Arial, sans-serif;
+      transform: translate(-50%, -50%);
+    }
+    /* TRUCK_XS = [W*0.165, W*0.5, W*0.835], answer circle at (truckX-4, TRUCK_Y-34) = (x, 614) */
+    #hj-ans-0 { left: 75px;  top: 614px; }
+    #hj-ans-1 { left: 236px; top: 614px; }
+    #hj-ans-2 { left: 397px; top: 614px; }
+
     /* HUD */
     #hud {
       position: absolute;
@@ -524,9 +537,9 @@
 <body>
 
 <div id="game-container">
-  <canvas id="gameCanvas" width="480" height="720"></canvas>
+  <canvas id="gameCanvas" width="480" height="720" data-hj-allow></canvas>
 
-  <div id="ui-overlay">
+  <div id="ui-overlay" data-hj-allow>
 
     <!-- HUD -->
     <div id="hud">
@@ -555,6 +568,11 @@
       <div id="question-text" data-hj-allow></div>
       <div id="question-hint" data-hj-allow>לחץ על הסוללה עם התשובה הנכונה</div>
     </div>
+
+    <!-- Hotjar: truck answer values — invisible but readable by session recordings -->
+    <span class="hj-truck-ans" id="hj-ans-0" data-hj-allow></span>
+    <span class="hj-truck-ans" id="hj-ans-1" data-hj-allow></span>
+    <span class="hj-truck-ans" id="hj-ans-2" data-hj-allow></span>
 
     <!-- Miss feedback -->
     <div id="miss-feedback">החטאה! נסה סוללה אחרת!</div>
@@ -896,6 +914,8 @@ function assignAnswers(question) {
   trucks.forEach((t, i) => {
     t.ansVal  = vals[i];
     t.correct = (vals[i] === question.ans);
+    const el = document.getElementById(`hj-ans-${i}`);
+    if (el) el.textContent = vals[i];
   });
 }
 
@@ -1421,6 +1441,7 @@ function applySpecialEffect(type, lx) {
       shieldActive = true;
       addFloat('🃏 ג\'וקר — הכל!', W / 2, H * 0.35, '#ffffff');
       showPowerBanner('🃏 כל הכוחות!', '#ffffff');
+      if (window.hj) hj('event', `joker_w${wave}`);
       break;
   }
 }
@@ -1491,6 +1512,7 @@ function useCard(type) {
   cards[type] = false;
   updateCardUI();
   activateCardEffect(type);
+  if (window.hj) hj('event', `card_used_${type}`);
 }
 
 function updateCardUI() {
@@ -1553,6 +1575,7 @@ function missileHit(missile) {
     } else {
       lives--;
       damageFlash = 500;
+      if (window.hj) hj('event', `life_lost_w${wave}_lives${lives}`);
     }
     updateHUD();
     if (lives <= 0) { waveActive = false; setTimeout(() => endGame(false), 800); }
@@ -1572,6 +1595,7 @@ function missileHit(missile) {
     } else {
       lives--;
       damageFlash = 700;
+      if (window.hj) hj('event', `life_lost_w${wave}_lives${lives}`);
     }
     updateHUD();
     if (wasQuestioned) promoteNextQuestioned();
@@ -1590,6 +1614,7 @@ function missileHit(missile) {
   } else {
     lives--;
     damageFlash = 700;
+    if (window.hj) hj('event', `life_lost_w${wave}_lives${lives}`);
   }
   updateHUD();
   if (wasQuestioned) promoteNextQuestioned();
@@ -1610,7 +1635,7 @@ function onWaveComplete() {
   }
 
   showBanner(bannerTitle, bannerSub);
-  if (window.hj) hj('event', `wave_complete`);
+  if (window.hj) hj('event', `wave_${wave}_diff${minMathLvl}`);
   setTimeout(() => {
     hideBanner();
     wave = nextWave;
@@ -2468,6 +2493,7 @@ function hideQ() {
   hint.style.color = '';
   hint.style.fontWeight = '';
   updateCardUI(); // swap_question card dims when no question
+  [0, 1, 2].forEach(i => { const el = document.getElementById(`hj-ans-${i}`); if (el) el.textContent = ''; });
 }
 
 let missTimer = null;
@@ -2510,6 +2536,7 @@ function activateLaser() {
 
   const targets = missiles.filter(m => m.active);
   if (targets.length === 0) return;
+  if (window.hj) hj('event', `laser_w${wave}_cnt${targets.length}`);
 
   // Fire laser beams from each truck to each target
   trucks.forEach(truck => {
