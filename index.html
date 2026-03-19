@@ -3097,11 +3097,39 @@ const POWERUP_ICONS = {
   restock: '🔋', blast: '💥', seven_boom: '7️⃣', sixty_seven: '67', double_shot: '🚀',
 };
 
+async function collectMeta() {
+  const ua = navigator.userAgent;
+  const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
+  const isTablet = /iPad|Tablet/i.test(ua) || (isMobile && Math.min(screen.width, screen.height) > 600);
+  const meta = {
+    user_agent:   ua,
+    language:     navigator.language,
+    timezone:     Intl.DateTimeFormat().resolvedOptions().timeZone,
+    screen:       `${screen.width}x${screen.height}@${window.devicePixelRatio}x`,
+    device_type:  isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop',
+    referrer:     document.referrer || null,
+    connection:   navigator.connection?.effectiveType || null,
+    hw_cores:     navigator.hardwareConcurrency || null,
+  };
+  try {
+    const geo = await Promise.race([
+      fetch('https://ipapi.co/json/').then(r => r.json()),
+      new Promise((_, rej) => setTimeout(rej, 3000)),
+    ]);
+    meta.country = geo.country_name || null;
+    meta.city    = geo.city         || null;
+    meta.region  = geo.region       || null;
+    meta.ip      = geo.ip           || null;
+  } catch (_) {}
+  return meta;
+}
+
 async function submitScore(name, scoreVal, waveVal, diff, topPowerup) {
+  const meta = await collectMeta();
   return sbFetch('/rest/v1/scores', {
     method: 'POST',
     prefer: 'return=representation',
-    body: JSON.stringify({ name, score: scoreVal, wave: waveVal, difficulty: diff, top_powerup: topPowerup || null }),
+    body: JSON.stringify({ name, score: scoreVal, wave: waveVal, difficulty: diff, top_powerup: topPowerup || null, meta }),
   });
 }
 
