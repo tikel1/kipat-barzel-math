@@ -1544,11 +1544,7 @@ function applySpecialEffect(type, lx) {
 
 // Give a power card. If already held → activate immediately instead of wasting it.
 function giveCard(type) {
-  if (cards[type]) {
-    // Slot full — activate now so the interception isn't wasted
-    activateCardEffect(type);
-    return;
-  }
+  if (cards[type]) return; // already holding this card — discard silently
   cards[type] = true;
   updateCardUI();
   track(`card_earned_${type}`);
