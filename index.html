@@ -541,6 +541,57 @@
     }
     .btn-primary:hover { transform: scale(1.05); box-shadow: 0 6px 28px rgba(46,196,182,0.5); }
     .btn-primary:active { transform: scale(0.97); }
+
+    /* ── Leaderboard / name-entry modals ── */
+    .modal {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: rgba(0,0,10,0.92);
+      z-index: 200; padding: 24px 20px; gap: 12px; direction: rtl;
+      font-family: 'Rubik', Arial, sans-serif;
+    }
+    .modal.hidden { display: none; }
+    .modal h3 { font-size: 1.4rem; color: #f0d060; margin: 0; text-align: center; }
+    .modal p  { margin: 0; color: #aaa; font-size: 0.95rem; text-align: center; }
+    #input-name {
+      font-size: 1.2rem; padding: 8px 14px; border-radius: 8px;
+      border: 2px solid #2ec4b6; background: #0e1428; color: #fff;
+      text-align: center; width: 220px; font-family: inherit;
+    }
+    #input-name.error { border-color: #f55; }
+    #modal-name-btns { display: flex; gap: 10px; }
+    #btn-name-submit {
+      padding: 8px 22px; border-radius: 8px; border: none;
+      background: #2ec4b6; color: #000; font-weight: bold; font-size: 1rem; cursor: pointer;
+    }
+    #btn-name-skip {
+      padding: 8px 16px; border-radius: 8px; border: 1px solid #445;
+      background: transparent; color: #aaa; font-size: 0.95rem; cursor: pointer;
+    }
+    #lb-tabs { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+    .lb-tab {
+      padding: 5px 13px; border-radius: 16px; border: 2px solid #334;
+      background: #111; color: #aaa; font-size: 0.9rem; cursor: pointer; font-family: inherit;
+    }
+    .lb-tab.active { border-color: #2ec4b6; color: #2ec4b6; }
+    .lb-table { border-collapse: collapse; width: 100%; font-size: 0.9rem; color: #ddd; }
+    .lb-table th, .lb-table td { padding: 5px 8px; text-align: center; border-bottom: 1px solid #223; }
+    .lb-table th { color: #2ec4b6; font-size: 0.8rem; }
+    .lb-gold   td { color: #ffd700; font-weight: bold; }
+    .lb-silver td { color: #c0c0c0; }
+    .lb-bronze td { color: #cd7f32; }
+    #lb-table-wrap { width: 100%; max-height: 320px; overflow-y: auto; }
+    #btn-lb-close {
+      align-self: flex-end; background: none; border: none; color: #aaa;
+      font-size: 1.4rem; cursor: pointer; line-height: 1;
+    }
+    #btn-lb-close:hover { color: #fff; }
+    .btn-lb-open {
+      background: transparent; border: 1px solid #334; color: #aaa;
+      padding: 7px 18px; border-radius: 8px; font-size: 0.9rem; cursor: pointer;
+      font-family: inherit; margin-top: 4px;
+    }
+    .btn-lb-open:hover { border-color: #2ec4b6; color: #2ec4b6; }
   </style>
 </head>
 <body>
@@ -647,6 +698,7 @@
         </div>
       </div>
       <button class="btn-primary" id="btn-start">▶  התחל משחק</button>
+      <button class="btn-lb-open" id="btn-open-lb">🏆  טבלת מובילים</button>
       <p style="font-size:0.68rem;color:#556;text-align:center;line-height:1.5;margin-top:6px;">המשחק תוכנן על ידי ליבי ונעמי קפלן מבית הספר כצנלסון גבעתיים</p>
     </div>
 
@@ -657,6 +709,7 @@
       <div class="final-score" id="gameover-score">ניקוד: 0</div>
       <button class="btn-primary" id="btn-replay">↺  נסה שוב</button>
       <button id="btn-gameover-menu">☰  תפריט ראשי</button>
+      <button class="btn-lb-open" id="btn-gameover-lb">🏆  טבלת מובילים</button>
     </div>
 
     <!-- Win screen (kept for future use) -->
@@ -665,6 +718,31 @@
       <p>מדהים! הגנתם על העיר!</p>
       <div class="final-score" id="win-score">ניקוד: 0</div>
       <button class="btn-primary" id="btn-replay-win">↺  שחק שוב</button>
+      <button class="btn-lb-open" id="btn-win-lb">🏆  טבלת מובילים</button>
+    </div>
+
+    <!-- Name entry modal -->
+    <div id="modal-name" class="modal hidden">
+      <h3>🏆 נכנסת לטבלת המובילים!</h3>
+      <p id="modal-name-rank"></p>
+      <input id="input-name" type="text" maxlength="20" placeholder="שם שלך" dir="rtl" autocomplete="off" />
+      <div id="modal-name-btns">
+        <button id="btn-name-submit">שמור</button>
+        <button id="btn-name-skip">דלג</button>
+      </div>
+    </div>
+
+    <!-- Leaderboard modal -->
+    <div id="modal-lb" class="modal hidden">
+      <button id="btn-lb-close">✕</button>
+      <h3>🏆 טבלת המובילים</h3>
+      <div id="lb-tabs">
+        <button class="lb-tab active" data-diff="1">מתחיל</button>
+        <button class="lb-tab" data-diff="2">מתקדם</button>
+        <button class="lb-tab" data-diff="3">קשה</button>
+        <button class="lb-tab" data-diff="4">טירוף</button>
+      </div>
+      <div id="lb-table-wrap"></div>
     </div>
 
   </div>
@@ -1824,6 +1902,10 @@ function endGame(won) {
   }
   track(`game_over_wave${wave}_score${score}_diff${minMathLvl}`);
   if (window.clarity) { clarity('set', 'max_wave', String(wave)); clarity('set', 'final_score', String(score)); }
+  const _snapScore = score, _snapWave = wave, _snapDiff = minMathLvl;
+  checkQualifies(_snapScore, _snapDiff).then(({ qualifies, rank }) => {
+    if (qualifies) showNameModal(rank, _snapScore, _snapWave, _snapDiff);
+  }).catch(() => {});
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2905,6 +2987,143 @@ function rRect(ctx, x, y, w, h, r) {
   ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
   ctx.closePath();
 }
+
+// ═══════════════════════════════════════════════════════════
+//  LEADERBOARD
+// ═══════════════════════════════════════════════════════════
+const SUPABASE_URL  = '%%SUPABASE_URL%%';
+const SUPABASE_ANON = '%%SUPABASE_ANON%%';
+const DIFF_NAMES    = { 1: 'מתחיל', 2: 'מתקדם', 3: 'קשה', 4: 'טירוף' };
+const LB_SIZE       = 15;
+const HEB_PROFANITY = ['זין','כוס','שרמוטה','בן זונה','מזדיין','מניאק',
+  'זונה','כוסאמק','נאלח','מפגר','יבניאק','מתחרבן','חרא','זבל','תזדיין'];
+
+function sanitizeName(raw) {
+  const s = raw.trim().replace(/\s+/g,' ').slice(0,20);
+  if (!s) return false;
+  const lower = s.toLowerCase();
+  for (const w of HEB_PROFANITY) if (lower.includes(w)) return false;
+  return s;
+}
+
+async function sbFetch(path, opts = {}) {
+  if (!SUPABASE_URL || SUPABASE_URL === '%%SUPABASE_URL%%') throw new Error('no config');
+  const res = await fetch(SUPABASE_URL + path, {
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': 'Bearer ' + SUPABASE_ANON,
+      'Content-Type': 'application/json',
+      'Prefer': opts.prefer || '',
+    },
+    ...opts
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json().catch(() => null);
+}
+
+async function fetchLeaderboard(diff) {
+  return sbFetch(`/rest/v1/scores?difficulty=eq.${diff}&order=score.desc&limit=${LB_SIZE}&select=name,score,wave`);
+}
+
+async function submitScore(name, scoreVal, waveVal, diff) {
+  return sbFetch('/rest/v1/scores', {
+    method: 'POST',
+    prefer: 'return=representation',
+    body: JSON.stringify({ name, score: scoreVal, wave: waveVal, difficulty: diff }),
+  });
+}
+
+async function checkQualifies(scoreVal, diff) {
+  const rows = await fetchLeaderboard(diff);
+  if (!rows) return { qualifies: false };
+  if (rows.length < LB_SIZE) return { qualifies: true, rank: rows.length + 1 };
+  const minScore = rows[rows.length - 1].score;
+  if (scoreVal > minScore) {
+    const rank = rows.filter(r => r.score > scoreVal).length + 1;
+    return { qualifies: true, rank };
+  }
+  return { qualifies: false };
+}
+
+let _pendingLbScore = null, _pendingLbDiff = null, _pendingLbWave = null;
+
+function showNameModal(rank, scoreVal, waveVal, diff) {
+  _pendingLbScore = scoreVal; _pendingLbDiff = diff; _pendingLbWave = waveVal;
+  const inp = document.getElementById('input-name');
+  inp.value = localStorage.getItem('lb_player_name') || '';
+  inp.classList.remove('error');
+  document.getElementById('modal-name-rank').textContent = `מקום ${rank} ברמה ${DIFF_NAMES[diff]}`;
+  document.getElementById('modal-name').classList.remove('hidden');
+}
+
+document.getElementById('btn-name-submit').addEventListener('click', async () => {
+  const inp  = document.getElementById('input-name');
+  const name = sanitizeName(inp.value);
+  if (!name) { inp.classList.add('error'); return; }
+  inp.classList.remove('error');
+  localStorage.setItem('lb_player_name', name);
+  if (window.clarity) clarity('set', 'player_name', name);
+  document.getElementById('modal-name').classList.add('hidden');
+  try { await submitScore(name, _pendingLbScore, _pendingLbWave, _pendingLbDiff); } catch (e) {}
+});
+
+document.getElementById('btn-name-skip').addEventListener('click', () => {
+  document.getElementById('modal-name').classList.add('hidden');
+});
+
+let lbDiff = 1;
+
+async function openLeaderboard(diff) {
+  lbDiff = diff || 1;
+  document.getElementById('modal-lb').classList.remove('hidden');
+  renderLbTabs();
+  await loadLbTab(lbDiff);
+}
+
+function renderLbTabs() {
+  document.querySelectorAll('.lb-tab').forEach(btn =>
+    btn.classList.toggle('active', Number(btn.dataset.diff) === lbDiff)
+  );
+}
+
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+  );
+}
+
+async function loadLbTab(diff) {
+  lbDiff = diff;
+  renderLbTabs();
+  const wrap = document.getElementById('lb-table-wrap');
+  wrap.innerHTML = '<p style="text-align:center;color:#aaa;padding:16px">טוען...</p>';
+  try {
+    const rows = await fetchLeaderboard(diff);
+    if (!rows || !rows.length) {
+      wrap.innerHTML = '<p style="text-align:center;color:#aaa;padding:16px">אין תוצאות עדיין — היה הראשון!</p>';
+      return;
+    }
+    const cls = ['lb-gold','lb-silver','lb-bronze'];
+    wrap.innerHTML = `<table class="lb-table">
+      <tr><th>#</th><th>שם</th><th>ניקוד</th><th>גל</th></tr>
+      ${rows.map((r,i) => `<tr class="${cls[i]||''}">
+        <td>${i+1}</td><td>${escHtml(r.name)}</td><td>${r.score}</td><td>${r.wave}</td>
+      </tr>`).join('')}
+    </table>`;
+  } catch (e) {
+    wrap.innerHTML = '<p style="text-align:center;color:#f66;padding:16px">שגיאה בטעינה</p>';
+  }
+}
+
+document.querySelectorAll('.lb-tab').forEach(btn =>
+  btn.addEventListener('click', () => loadLbTab(Number(btn.dataset.diff)))
+);
+document.getElementById('btn-lb-close').addEventListener('click', () =>
+  document.getElementById('modal-lb').classList.add('hidden')
+);
+document.getElementById('btn-open-lb').addEventListener('click', () => openLeaderboard(1));
+document.getElementById('btn-gameover-lb').addEventListener('click', () => openLeaderboard(typeof minMathLvl !== 'undefined' ? minMathLvl : 1));
+document.getElementById('btn-win-lb').addEventListener('click', () => openLeaderboard(typeof minMathLvl !== 'undefined' ? minMathLvl : 1));
 
 // ═══════════════════════════════════════════════════════════
 //  BOOT
