@@ -3076,7 +3076,14 @@ async function sbFetch(path, opts = {}) {
 }
 
 async function fetchLeaderboard(diff) {
-  return sbFetch(`/rest/v1/scores?difficulty=eq.${diff}&order=score.desc&limit=${LB_SIZE}&select=name,score,wave,top_powerup`);
+  try {
+    return await sbFetch(`/rest/v1/scores?difficulty=eq.${diff}&order=score.desc&limit=${LB_SIZE}&select=name,score,wave,top_powerup`);
+  } catch (e) {
+    if (e.message && e.message.includes('top_powerup')) {
+      return sbFetch(`/rest/v1/scores?difficulty=eq.${diff}&order=score.desc&limit=${LB_SIZE}&select=name,score,wave`);
+    }
+    throw e;
+  }
 }
 
 function getTopPowerup() {
