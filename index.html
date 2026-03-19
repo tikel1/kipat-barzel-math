@@ -3125,7 +3125,8 @@ async function loadLbTab(diff) {
       </tr>`).join('')}
     </table>`;
   } catch (e) {
-    wrap.innerHTML = '<p style="text-align:center;color:#f66;padding:16px">שגיאה בטעינה</p>';
+    console.error('Leaderboard load error:', e.message);
+    wrap.innerHTML = `<p style="text-align:center;color:#f66;padding:16px">שגיאה בטעינה<br><small style="opacity:.6">${escHtml(e.message)}</small></p>`;
   }
 }
 
