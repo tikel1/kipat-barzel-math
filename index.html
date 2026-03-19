@@ -604,6 +604,9 @@
       <button class="card-slot" id="card-wrong_only"    style="--card-col:#e03060" onclick="useCard('wrong_only')"    title="רק תשובות לא נכונות 🚫">🚫</button>
       <button class="card-slot" id="card-restock"       style="--card-col:#44dd88" onclick="useCard('restock')"       title="הצטיידות מחדש 🔋">🔋</button>
       <button class="card-slot" id="card-blast"         style="--card-col:#cc44ff" onclick="useCard('blast')"         title="מגה פיצוץ 💥">💥</button>
+      <button class="card-slot" id="card-seven_boom"   style="--card-col:#ffbb00" onclick="useCard('seven_boom')"   title="7 בום 7️⃣">7️⃣</button>
+      <button class="card-slot" id="card-sixty_seven"  style="--card-col:#00ccaa" onclick="useCard('sixty_seven')"  title="הכל 67 🎯">🎯</button>
+      <button class="card-slot" id="card-double_shot"  style="--card-col:#ff3399" onclick="useCard('double_shot')"  title="כפול 🎯🎯">🎯🎯</button>
     </div>
 
     <!-- Level-up banner -->
@@ -694,6 +697,9 @@ const SPECIAL_TYPES = {
   restock:       { col: '#44dd88', shadow: '#1a7740', label: 'הצטיידות מחדש 🔋'              },
   blast:         { col: '#cc44ff', shadow: '#7700cc', label: 'כרטיס מגה פיצוץ 💥'           },
   joker:         { col: '#ffffff', shadow: '#999999', label: '🃏 ג\'וקר — כל הכוחות!'       },
+  seven_boom:    { col: '#ffbb00', shadow: '#aa7700', label: 'כרטיס 7 בום 7️⃣'               },
+  sixty_seven:   { col: '#00ccaa', shadow: '#007766', label: 'כרטיס הכל 67 🎯'              },
+  double_shot:   { col: '#ff3399', shadow: '#aa0055', label: 'כרטיס כפול 🎯🎯'               },
 };
 
 // Infinite wave config — escalates smoothly over 40 waves then stays maxed
@@ -750,6 +756,9 @@ let freezeTimer      = 0;   // ms remaining
 let hintTimer        = 0;   // ms remaining
 let wrongOnlyTimer   = 0;   // ms remaining — wrong-answer batteries blocked
 let blastTimer       = 0;   // ms remaining — interceptors explode in splash radius
+let sevenBoomTimer   = 0;   // ms remaining — all answers must be ×7 or contain digit 7
+let sixtySevenTimer  = 0;   // ms remaining — all answers are 67
+let doubleShotTimer  = 0;   // ms remaining — correct shot also fires at a random second missile
 let shieldActive     = false;
 let specialBag        = [];    // shuffled deck — ensures full rotation before repeats
 let waveSpecialSlots  = new Set(); // which spawned indices trigger a special missile this wave
@@ -763,7 +772,7 @@ let lasers     = []; // [{x1,y1,x2,y2,alpha,elapsed}]
 let shockwaves = []; // [{x,y,r,maxR,alpha}] — expanding blast rings
 
 // ── Power cards ──
-const CARD_TYPES = ['freeze', 'hint', 'swap_question', 'wrong_only', 'restock', 'blast'];
+const CARD_TYPES = ['freeze', 'hint', 'swap_question', 'wrong_only', 'restock', 'blast', 'seven_boom', 'sixty_seven', 'double_shot'];
 const cards = { freeze: false, hint: false, swap_question: false, wrong_only: false, restock: false, blast: false };
 
 let missiles        = [];
@@ -804,7 +813,29 @@ const CLOUDS = [
 // ═══════════════════════════════════════════════════════════
 //  MATH ENGINE
 // ═══════════════════════════════════════════════════════════
+function gen67Question() {
+  const a = ri(1, 66);
+  return Math.random() < 0.5
+    ? { text: `${a} + ${67 - a} = ?`, ans: 67 }
+    : { text: `${67 + a} − ${a} = ?`, ans: 67 };
+}
+
 function genQuestion(lvl) {
+  if (sixtySevenTimer > 0) return gen67Question();
+  if (sevenBoomTimer  > 0) {
+    for (let i = 0; i < 40; i++) {
+      const q = genQuestionInner(lvl);
+      if (q.ans % 7 === 0 || String(q.ans).includes('7')) return q;
+    }
+    // fallback: a + b = 7×n
+    const ans = ri(1, 10) * 7;
+    const a   = ri(1, ans - 1);
+    return { text: `${a} + ${ans - a} = ?`, ans };
+  }
+  return genQuestionInner(lvl);
+}
+
+function genQuestionInner(lvl) {
   // scale: 0 at wave 1 → 1 at wave 11+. Only ONE operand scales.
   const scale = Math.min((wave - 1) / 10, 1);
   let a, b, op, ans;
@@ -884,6 +915,15 @@ function genQuestion(lvl) {
   return { text: `${a} ${op} ${b} = ?`, ans };
 }
 
+// Regenerate questions for all active missiles (used by 7-boom / sixty-seven activation)
+function regenerateAllMissileQuestions() {
+  missiles.forEach(m => {
+    if (!m.active || m.mini || m.splitter || m.special || !m.question) return;
+    m.question = genQuestion(minMathLvl);
+    if (m === questionedMissile) { assignAnswers(m.question); showQ(m.question.text); }
+  });
+}
+
 function wrongAnswers(correct) {
   const set = new Set();
   const deltas = [ri(1,4), -ri(1,4), ri(5,11), -ri(5,11), ri(12,20), -ri(12,20)];
@@ -958,6 +998,9 @@ function refillSpecialBag() {
     ...Array(2).fill('extra_life'),
     ...Array(3).fill('restock'),
     ...Array(3).fill('swap_question'),
+    ...Array(2).fill('seven_boom'),
+    ...Array(2).fill('sixty_seven'),
+    ...Array(2).fill('double_shot'),
   ];
   if (wave >= 4) specialBag.push('joker', 'joker'); // 2× joker from wave 4
   // Fisher-Yates shuffle
@@ -1148,9 +1191,12 @@ function update(dt) {
   // Tick effect timers
   if (doubleScoreTimer > 0) doubleScoreTimer -= dt;
   if (freezeTimer      > 0) freezeTimer      -= dt;
-  if (hintTimer        > 0) hintTimer         -= dt;
+  if (hintTimer        > 0) hintTimer        -= dt;
   if (wrongOnlyTimer   > 0) wrongOnlyTimer   -= dt;
   if (blastTimer       > 0) blastTimer       -= dt;
+  if (sevenBoomTimer   > 0) sevenBoomTimer   -= dt;
+  if (sixtySevenTimer  > 0) sixtySevenTimer  -= dt;
+  if (doubleShotTimer  > 0) doubleShotTimer  -= dt;
 
   if (waveActive && (gameState === 'PLAYING' || gameState === 'QUESTION')) {
     const cfg = getWaveCfg(wave);
@@ -1271,7 +1317,8 @@ function updateInterceptor(ic, dt) {
       const ex = ic.x, ey = ic.y;
       explosions.push(mkExplosion(ex, ey, true));
       beep('boom');
-      onIntercepted(ic.target, ex, ey, ic.srcX);
+      if (ic.bonusShot) onBonusShotIntercepted(ic.target, ex, ey);
+      else              onIntercepted(ic.target, ex, ey, ic.srcX);
       ic.active = false;
       return;
     }
@@ -1323,6 +1370,16 @@ function fireTruck(truck) {
     beep('correct');
     const ic = mkInterceptor(truck.x, truck.y, questionedMissile, true, truck.x);
     interceptors.push(ic);
+    // Double shot — fire a bonus interceptor at a random second missile
+    if (doubleShotTimer > 0) {
+      const others = missiles.filter(m => m.active && m !== questionedMissile && !m.mini);
+      if (others.length > 0) {
+        const bonus = others[ri(0, others.length - 1)];
+        const bic = mkInterceptor(truck.x, truck.y, bonus, true, truck.x);
+        bic.bonusShot = true;
+        interceptors.push(bic);
+      }
+    }
   } else {
     if (truck.stock <= 0) return;
     truck.stock--;
@@ -1335,6 +1392,19 @@ function fireTruck(truck) {
     const ic = mkInterceptor(truck.x, truck.y, questionedMissile, false);
     interceptors.push(ic);
   }
+}
+
+// Bonus interceptor from double_shot — gives score, advances resolved, NO streak change
+function onBonusShotIntercepted(missile, ex, ey) {
+  if (missile.special) { applySpecialEffect(missile.specialType, ex); return; }
+  let pts = Math.round((40 + wave * 4) * (doubleScoreTimer > 0 ? 2 : 1));
+  score += pts;
+  addFloat(`+${pts}`, ex, ey - 10, '#ff3399');
+  if (!missile.mini) resolved++;
+  if (missile === questionedMissile) { questionedMissile = null; hideQ(); }
+  triggerBlastSplash(ex, ey);
+  updateHUD();
+  promoteNextQuestioned();
 }
 
 function onIntercepted(missile, ex, ey, truckX) {
@@ -1424,7 +1494,7 @@ function onIntercepted(missile, ex, ey, truckX) {
 function applySpecialEffect(type, lx) {
   switch (type) {
     case 'double_score':
-      doubleScoreTimer = 20000;
+      doubleScoreTimer = 15000;
       addFloat('★ ניקוד כפול פעיל!', W / 2, H * 0.38, '#ffd700');
       showPowerBanner('★ ניקוד ×2', '#ffd700');
       break;
@@ -1473,9 +1543,9 @@ function giveCard(type) {
   cards[type] = true;
   updateCardUI();
   track(`card_earned_${type}`);
-  const icons  = { freeze: '❄️', hint: '💡', swap_question: '🔄', wrong_only: '🚫', restock: '🔋', blast: '💥' };
-  const names  = { freeze: 'הקפאה', hint: 'רמז', swap_question: 'החלפת שאלה', wrong_only: 'רק תשובות לא נכונות', restock: 'הצטיידות', blast: 'מגה פיצוץ' };
-  const cols   = { freeze: '#00d4ff', hint: '#ff9900', swap_question: '#b044ff', wrong_only: '#e03060', restock: '#44dd88', blast: '#cc44ff' };
+  const icons  = { freeze: '❄️', hint: '💡', swap_question: '🔄', wrong_only: '🚫', restock: '🔋', blast: '💥', seven_boom: '7️⃣', sixty_seven: '🎯', double_shot: '🎯🎯' };
+  const names  = { freeze: 'הקפאה', hint: 'רמז', swap_question: 'החלפת שאלה', wrong_only: 'רק תשובות לא נכונות', restock: 'הצטיידות', blast: 'מגה פיצוץ', seven_boom: 'שבע בום', sixty_seven: 'הכל 67', double_shot: 'כפול' };
+  const cols   = { freeze: '#00d4ff', hint: '#ff9900', swap_question: '#b044ff', wrong_only: '#e03060', restock: '#44dd88', blast: '#cc44ff', seven_boom: '#ffbb00', sixty_seven: '#00ccaa', double_shot: '#ff3399' };
   const ic = icons[type], nm = names[type], col = cols[type];
   addFloat(`${ic} ${nm}`, W / 2, H * 0.38, col);
   showPowerBanner(`${ic} ${nm}`, col);
@@ -1484,12 +1554,12 @@ function giveCard(type) {
 function activateCardEffect(type) {
   switch (type) {
     case 'freeze':
-      freezeTimer = 12000;
+      freezeTimer = 15000;
       addFloat('❄️ הקפאה!', W / 2, H * 0.38, '#00d4ff');
       showPowerBanner('❄️ הקפאה', '#00d4ff');
       break;
     case 'hint':
-      hintTimer = 6000;
+      hintTimer = 15000;
       showPowerBanner('💡 רמז', '#ff9900');
       break;
     case 'swap_question':
@@ -1505,7 +1575,7 @@ function activateCardEffect(type) {
       showPowerBanner('🔄 שאלה חדשה', '#b044ff');
       break;
     case 'wrong_only':
-      wrongOnlyTimer = 10000;
+      wrongOnlyTimer = 15000;
       addFloat('🚫 רק תשובות לא נכונות!', W / 2, H * 0.38, '#e03060');
       showPowerBanner('🚫 רק תשובות לא נכונות', '#e03060');
       break;
@@ -1519,6 +1589,23 @@ function activateCardEffect(type) {
       blastTimer = 15000;
       addFloat('💥 מגה פיצוץ!', W / 2, H * 0.38, '#cc44ff');
       showPowerBanner('💥 מגה פיצוץ', '#cc44ff');
+      break;
+    case 'seven_boom':
+      sevenBoomTimer = 15000;
+      regenerateAllMissileQuestions();
+      addFloat('7️⃣ שבע בום!', W / 2, H * 0.38, '#ffbb00');
+      showPowerBanner('7️⃣ שבע בום', '#ffbb00');
+      break;
+    case 'sixty_seven':
+      sixtySevenTimer = 15000;
+      regenerateAllMissileQuestions();
+      addFloat('🎯 הכל 67!', W / 2, H * 0.38, '#00ccaa');
+      showPowerBanner('🎯 הכל 67', '#00ccaa');
+      break;
+    case 'double_shot':
+      doubleShotTimer = 15000;
+      addFloat('🎯🎯 כפול!', W / 2, H * 0.38, '#ff3399');
+      showPowerBanner('🎯🎯 כפול', '#ff3399');
       break;
   }
 }
@@ -1690,7 +1777,7 @@ function startNewGame() {
   missiles = []; interceptors = []; explosions = []; floatTexts = []; shockwaves = [];
   questionedMissile = null;
   damageFlash = 0; hoveredTruck = null;
-  doubleScoreTimer = 0; freezeTimer = 0; hintTimer = 0; wrongOnlyTimer = 0; blastTimer = 0; shieldActive = false;
+  doubleScoreTimer = 0; freezeTimer = 0; hintTimer = 0; wrongOnlyTimer = 0; blastTimer = 0; sevenBoomTimer = 0; sixtySevenTimer = 0; doubleShotTimer = 0; shieldActive = false;
   streak = 0; energy = 0; lasers = []; updateLaserBtn();
   CARD_TYPES.forEach(t => { cards[t] = false; }); updateCardUI();
   document.getElementById('laser-btn-wrap').style.display = '';
@@ -1716,7 +1803,7 @@ function endGame(won) {
   questionedMissile = null;
   hideQ();
   energy = 0; streak = 0; updateLaserBtn();      // strip ready/pulse state before hiding
-  doubleScoreTimer = 0; freezeTimer = 0; hintTimer = 0; wrongOnlyTimer = 0; blastTimer = 0; shieldActive = false;
+  doubleScoreTimer = 0; freezeTimer = 0; hintTimer = 0; wrongOnlyTimer = 0; blastTimer = 0; sevenBoomTimer = 0; sixtySevenTimer = 0; doubleShotTimer = 0; shieldActive = false;
   CARD_TYPES.forEach(t => { cards[t] = false; }); updateCardUI();
   // Hide HUD overlays
   document.getElementById('laser-btn-wrap').style.display = 'none';
@@ -1810,42 +1897,52 @@ function drawClouds(dt) {
 function drawEffects() {
   const now = performance.now();
   const indicators = [];
-  if (doubleScoreTimer > 0) indicators.push({ icon: '★', label: 'ניקוד ×2', col: '#ffd700', t: doubleScoreTimer / 20000, timeMs: doubleScoreTimer });
-  if (freezeTimer      > 0) indicators.push({ icon: '❄️', label: 'הקפאה',    col: '#00d4ff', t: freezeTimer / 12000,      timeMs: freezeTimer });
-  if (shieldActive)          indicators.push({ icon: '🛡', label: 'מגן',      col: '#d0d0e0', t: 1,                        timeMs: 0 });
-  if (hintTimer        > 0) indicators.push({ icon: '💡', label: 'רמז',      col: '#ff9900', t: hintTimer / 6000,          timeMs: hintTimer });
-  if (wrongOnlyTimer   > 0) indicators.push({ icon: '🚫', label: 'רק לא נכונות', col: '#e03060', t: wrongOnlyTimer / 10000, timeMs: wrongOnlyTimer });
-  if (blastTimer       > 0) indicators.push({ icon: '💥', label: 'מגה פיצוץ',   col: '#cc44ff', t: blastTimer / 15000,     timeMs: blastTimer });
+  if (doubleScoreTimer > 0) indicators.push({ icon: '★',    label: 'ניקוד ×2',    col: '#ffd700', t: doubleScoreTimer / 15000, timeMs: doubleScoreTimer });
+  if (freezeTimer      > 0) indicators.push({ icon: '❄️',   label: 'הקפאה',       col: '#00d4ff', t: freezeTimer / 15000,      timeMs: freezeTimer });
+  if (shieldActive)          indicators.push({ icon: '🛡',   label: 'מגן',         col: '#d0d0e0', t: 1,                        timeMs: 0 });
+  if (hintTimer        > 0) indicators.push({ icon: '💡',   label: 'רמז',         col: '#ff9900', t: hintTimer / 15000,         timeMs: hintTimer });
+  if (wrongOnlyTimer   > 0) indicators.push({ icon: '🚫',   label: 'רק לא נכונות', col: '#e03060', t: wrongOnlyTimer / 15000,  timeMs: wrongOnlyTimer });
+  if (blastTimer       > 0) indicators.push({ icon: '💥',   label: 'מגה פיצוץ',  col: '#cc44ff', t: blastTimer / 15000,        timeMs: blastTimer });
+  if (sevenBoomTimer   > 0) indicators.push({ icon: '7️⃣',  label: 'שבע בום',     col: '#ffbb00', t: sevenBoomTimer / 15000,   timeMs: sevenBoomTimer });
+  if (sixtySevenTimer  > 0) indicators.push({ icon: '🎯',   label: 'הכל 67',      col: '#00ccaa', t: sixtySevenTimer / 15000,  timeMs: sixtySevenTimer });
+  if (doubleShotTimer  > 0) indicators.push({ icon: '🎯🎯', label: 'כפול',         col: '#ff3399', t: doubleShotTimer / 15000,  timeMs: doubleShotTimer });
   if (!indicators.length) return;
 
-  const barW = 82, barH = 16, pad = 6;
+  const barW = 118, barH = 26, pad = 5;
   indicators.forEach((ind, i) => {
     const x = W - barW - 10;
     const y = 62 + i * (barH + pad);
     const isLow = ind.timeMs > 0 && ind.t < 0.25;
-    // Fast blink when < 25% remaining, normal pulse otherwise
     const pulse = isLow
-      ? (Math.sin(now * 0.018) > 0 ? 1.0 : 0.25)
-      : 0.75 + 0.25 * Math.sin(now * 0.004 + i * 1.4);
+      ? (Math.sin(now * 0.018) > 0 ? 1.0 : 0.30)
+      : 0.80 + 0.20 * Math.sin(now * 0.004 + i * 1.4);
+    if (isLow) { ctx.shadowColor = ind.col; ctx.shadowBlur = 10 * pulse; }
     // background
-    ctx.globalAlpha = 0.85;
-    ctx.fillStyle = 'rgba(0,0,0,0.60)';
-    ctx.beginPath(); ctx.roundRect(x, y, barW, barH, 4); ctx.fill();
-    // progress bar
+    ctx.globalAlpha = 0.90;
+    ctx.fillStyle = 'rgba(0,0,0,0.70)';
+    ctx.beginPath(); ctx.roundRect(x - 1, y - 1, barW + 2, barH + 2, 6); ctx.fill();
+    // progress fill
     ctx.fillStyle = ind.col;
-    ctx.globalAlpha = isLow ? pulse * 0.55 : 0.28;
-    if (ind.t > 0) { ctx.beginPath(); ctx.roundRect(x, y, barW * ind.t, barH, 4); ctx.fill(); }
-    // text label + countdown
+    ctx.globalAlpha = isLow ? pulse * 0.45 : 0.28;
+    if (ind.t > 0) { ctx.beginPath(); ctx.roundRect(x, y, barW * ind.t, barH, 5); ctx.fill(); }
+    ctx.shadowBlur = 0;
+    // icon + label
     ctx.globalAlpha = pulse;
     ctx.fillStyle = ind.col;
-    ctx.font = `bold 10px Rubik, Arial`;
-    ctx.textAlign = 'right';
+    ctx.font = 'bold 11px Rubik, Arial';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    const secLeft = ind.timeMs > 0 ? ` ${Math.ceil(ind.timeMs / 1000)}s` : '';
-    ctx.fillText(`${ind.icon} ${ind.label}${secLeft}`, x + barW - 4, y + barH / 2);
+    ctx.fillText(`${ind.icon} ${ind.label}`, x + 6, y + barH / 2);
+    // large countdown number
+    if (ind.timeMs > 0) {
+      ctx.font = 'bold 16px Rubik, Arial';
+      ctx.textAlign = 'right';
+      ctx.fillText(`${Math.ceil(ind.timeMs / 1000)}`, x + barW - 6, y + barH / 2);
+    }
   });
   ctx.globalAlpha = 1;
   ctx.textAlign = 'left';
+  ctx.shadowBlur = 0;
 }
 
 function drawEnergyBar() {
@@ -2690,7 +2787,7 @@ document.getElementById('btn-menu').addEventListener('click', () => {
   pausedState = null;
   waveActive = false;
   missiles = []; interceptors = []; explosions = []; floatTexts = []; shockwaves = [];
-  doubleScoreTimer = 0; freezeTimer = 0; hintTimer = 0; wrongOnlyTimer = 0; blastTimer = 0; shieldActive = false;
+  doubleScoreTimer = 0; freezeTimer = 0; hintTimer = 0; wrongOnlyTimer = 0; blastTimer = 0; sevenBoomTimer = 0; sixtySevenTimer = 0; doubleShotTimer = 0; shieldActive = false;
   questionedMissile = null; damageFlash = 0; hoveredTruck = null;
   hideQ();
   document.getElementById('pause-overlay').classList.add('hidden');
@@ -2720,7 +2817,7 @@ document.getElementById('btn-replay-win').addEventListener('click', () => {
 document.getElementById('btn-gameover-menu').addEventListener('click', () => {
   gameState = 'START';
   missiles = []; interceptors = []; explosions = []; floatTexts = []; shockwaves = [];
-  doubleScoreTimer = 0; freezeTimer = 0; hintTimer = 0; wrongOnlyTimer = 0; blastTimer = 0; shieldActive = false;
+  doubleScoreTimer = 0; freezeTimer = 0; hintTimer = 0; wrongOnlyTimer = 0; blastTimer = 0; sevenBoomTimer = 0; sixtySevenTimer = 0; doubleShotTimer = 0; shieldActive = false;
   questionedMissile = null; damageFlash = 0; hoveredTruck = null; waveActive = false;
   hideQ();
   showScreen('start');
