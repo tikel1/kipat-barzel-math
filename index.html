@@ -608,16 +608,10 @@
     .lb-table tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.1s; }
     .lb-table tbody tr:last-child { border-bottom: none; }
     .lb-table tbody tr:hover { background: rgba(255,255,255,0.03); }
-    .lb-rank-col { color: #445; font-size: 0.8rem; width: 28px; }
+    .lb-rank-col { color: #445; font-size: 0.85rem; width: 32px; }
     .lb-gold   td { color: #ffd700; font-weight: 700; }
-    .lb-gold   .lb-rank-col::before   { content: '🥇'; font-size: 1rem; }
     .lb-silver td { color: #b8c8d8; }
-    .lb-silver .lb-rank-col::before   { content: '🥈'; font-size: 1rem; }
     .lb-bronze td { color: #cd7f32; }
-    .lb-bronze .lb-rank-col::before   { content: '🥉'; font-size: 1rem; }
-    .lb-gold .lb-rank-col,
-    .lb-silver .lb-rank-col,
-    .lb-bronze .lb-rank-col { color: transparent; font-size: 0; }
     #lb-table-wrap { width: 100%; max-height: 320px; overflow-y: auto;
       scrollbar-width: thin; scrollbar-color: #1e3058 transparent; }
     .btn-lb-open {
@@ -758,12 +752,12 @@
     <!-- Name entry modal -->
     <div id="modal-name" class="modal hidden">
       <div class="modal-card">
-        <h3>🏆 נכנסת לטבלת המובילים!</h3>
+        <h3 id="modal-name-title">📊 סיום משחק</h3>
         <p id="modal-name-rank"></p>
-        <input id="input-name" type="text" maxlength="20" placeholder="שם שלך" dir="rtl" autocomplete="off" />
+        <input id="input-name" type="text" maxlength="20" placeholder="שם שלך (אופציונלי)" dir="rtl" autocomplete="off" />
         <div id="modal-name-btns">
           <button id="btn-name-submit">שמור</button>
-          <button id="btn-name-skip">דלג</button>
+          <button id="btn-name-skip">המשך</button>
         </div>
       </div>
     </div>
@@ -1942,8 +1936,8 @@ function endGame(won) {
   if (window.clarity) { clarity('set', 'max_wave', String(wave)); clarity('set', 'final_score', String(score)); }
   const _snapScore = score, _snapWave = wave, _snapDiff = minMathLvl;
   checkQualifies(_snapScore, _snapDiff).then(({ qualifies, rank }) => {
-    if (qualifies) showNameModal(rank, _snapScore, _snapWave, _snapDiff);
-  }).catch(() => {});
+    showNameModal(qualifies ? rank : null, _snapScore, _snapWave, _snapDiff);
+  }).catch(() => { showNameModal(null, _snapScore, _snapWave, _snapDiff); });
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -3083,26 +3077,32 @@ async function checkQualifies(scoreVal, diff) {
   return { qualifies: false };
 }
 
-let _pendingLbScore = null, _pendingLbDiff = null, _pendingLbWave = null;
+let _pendingLbScore = null, _pendingLbDiff = null, _pendingLbWave = null, _pendingQualifies = false;
 
 function showNameModal(rank, scoreVal, waveVal, diff) {
   _pendingLbScore = scoreVal; _pendingLbDiff = diff; _pendingLbWave = waveVal;
+  _pendingQualifies = rank !== null;
   const inp = document.getElementById('input-name');
   inp.value = localStorage.getItem('lb_player_name') || '';
   inp.classList.remove('error');
-  document.getElementById('modal-name-rank').textContent = `מקום ${rank} ברמה ${DIFF_NAMES[diff]}`;
+  document.getElementById('modal-name-title').textContent =
+    _pendingQualifies ? '🏆 נכנסת לטבלת המובילים!' : '📊 סיום משחק';
+  const rankEl = document.getElementById('modal-name-rank');
+  rankEl.textContent = _pendingQualifies ? `מקום ${rank} ברמה ${DIFF_NAMES[diff]}` : '';
+  rankEl.style.display = _pendingQualifies ? '' : 'none';
   document.getElementById('modal-name').classList.remove('hidden');
 }
 
 document.getElementById('btn-name-submit').addEventListener('click', async () => {
   const inp  = document.getElementById('input-name');
   const name = sanitizeName(inp.value);
-  if (!name) { inp.classList.add('error'); return; }
-  inp.classList.remove('error');
+  document.getElementById('modal-name').classList.add('hidden');
+  if (!name) return; // optional — empty means skip storing
   localStorage.setItem('lb_player_name', name);
   if (window.clarity) clarity('set', 'player_name', name);
-  document.getElementById('modal-name').classList.add('hidden');
-  try { await submitScore(name, _pendingLbScore, _pendingLbWave, _pendingLbDiff); } catch (e) {}
+  if (_pendingQualifies) {
+    try { await submitScore(name, _pendingLbScore, _pendingLbWave, _pendingLbDiff); } catch (e) {}
+  }
 });
 
 document.getElementById('btn-name-skip').addEventListener('click', () => {
@@ -3141,11 +3141,12 @@ async function loadLbTab(diff) {
       wrap.innerHTML = '<p style="text-align:center;color:#aaa;padding:16px">אין תוצאות עדיין — היה הראשון!</p>';
       return;
     }
-    const cls = ['lb-gold','lb-silver','lb-bronze'];
+    const cls   = ['lb-gold','lb-silver','lb-bronze'];
+    const medal = ['🥇','🥈','🥉'];
     wrap.innerHTML = `<table class="lb-table">
       <thead><tr><th>#</th><th>שם</th><th>ניקוד</th><th>גל</th></tr></thead>
       <tbody>${rows.map((r,i) => `<tr class="${cls[i]||''}">
-        <td class="lb-rank-col">${i+1}</td><td>${escHtml(r.name)}</td><td>${r.score}</td><td>${r.wave}</td>
+        <td class="lb-rank-col">${medal[i] || i+1}</td><td>${escHtml(r.name)}</td><td>${r.score}</td><td>${r.wave}</td>
       </tr>`).join('')}</tbody>
     </table>`;
   } catch (e) {
