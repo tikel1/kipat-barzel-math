@@ -605,8 +605,8 @@
       <button class="card-slot" id="card-restock"       style="--card-col:#44dd88" onclick="useCard('restock')"       title="הצטיידות מחדש 🔋">🔋</button>
       <button class="card-slot" id="card-blast"         style="--card-col:#cc44ff" onclick="useCard('blast')"         title="מגה פיצוץ 💥">💥</button>
       <button class="card-slot" id="card-seven_boom"   style="--card-col:#ffbb00" onclick="useCard('seven_boom')"   title="7 בום 7️⃣">7️⃣</button>
-      <button class="card-slot" id="card-sixty_seven"  style="--card-col:#00ccaa" onclick="useCard('sixty_seven')"  title="הכל 67 🎯">🎯</button>
-      <button class="card-slot" id="card-double_shot"  style="--card-col:#ff3399" onclick="useCard('double_shot')"  title="כפול 🎯🎯">🎯🎯</button>
+      <button class="card-slot" id="card-sixty_seven"  style="--card-col:#00ccaa" onclick="useCard('sixty_seven')"  title="הכל 67" style="font-size:13px;font-weight:bold">67</button>
+      <button class="card-slot" id="card-double_shot"  style="--card-col:#ff3399" onclick="useCard('double_shot')"  title="כפול 🚀🚀">🚀🚀</button>
     </div>
 
     <!-- Level-up banner -->
@@ -698,8 +698,8 @@ const SPECIAL_TYPES = {
   blast:         { col: '#cc44ff', shadow: '#7700cc', label: 'כרטיס מגה פיצוץ 💥'           },
   joker:         { col: '#ffffff', shadow: '#999999', label: '🃏 ג\'וקר — כל הכוחות!'       },
   seven_boom:    { col: '#ffbb00', shadow: '#aa7700', label: 'כרטיס 7 בום 7️⃣'               },
-  sixty_seven:   { col: '#00ccaa', shadow: '#007766', label: 'כרטיס הכל 67 🎯'              },
-  double_shot:   { col: '#ff3399', shadow: '#aa0055', label: 'כרטיס כפול 🎯🎯'               },
+  sixty_seven:   { col: '#00ccaa', shadow: '#007766', label: 'כרטיס הכל 67'                 },
+  double_shot:   { col: '#ff3399', shadow: '#aa0055', label: 'כרטיס כפול 🚀🚀'               },
 };
 
 // Infinite wave config — escalates smoothly over 40 waves then stays maxed
@@ -1517,7 +1517,10 @@ function applySpecialEffect(type, lx) {
       showPowerBanner('🛡 מגן', '#d0d0e0');
       break;
     case 'blast':
-      giveCard('blast');
+    case 'seven_boom':
+    case 'sixty_seven':
+    case 'double_shot':
+      giveCard(type);
       break;
     case 'joker':
       // Give ALL card-type powers at once
@@ -1543,7 +1546,7 @@ function giveCard(type) {
   cards[type] = true;
   updateCardUI();
   track(`card_earned_${type}`);
-  const icons  = { freeze: '❄️', hint: '💡', swap_question: '🔄', wrong_only: '🚫', restock: '🔋', blast: '💥', seven_boom: '7️⃣', sixty_seven: '🎯', double_shot: '🎯🎯' };
+  const icons  = { freeze: '❄️', hint: '💡', swap_question: '🔄', wrong_only: '🚫', restock: '🔋', blast: '💥', seven_boom: '7️⃣', sixty_seven: '67', double_shot: '🚀🚀' };
   const names  = { freeze: 'הקפאה', hint: 'רמז', swap_question: 'החלפת שאלה', wrong_only: 'רק תשובות לא נכונות', restock: 'הצטיידות', blast: 'מגה פיצוץ', seven_boom: 'שבע בום', sixty_seven: 'הכל 67', double_shot: 'כפול' };
   const cols   = { freeze: '#00d4ff', hint: '#ff9900', swap_question: '#b044ff', wrong_only: '#e03060', restock: '#44dd88', blast: '#cc44ff', seven_boom: '#ffbb00', sixty_seven: '#00ccaa', double_shot: '#ff3399' };
   const ic = icons[type], nm = names[type], col = cols[type];
@@ -2393,7 +2396,10 @@ function drawMissile(m, isQuestioned) {
     ctx.fillStyle = isJoker ? '#ffd700' : stype.col;
     ctx.shadowColor = isJoker ? '#ff4400' : stype.shadow;
     ctx.shadowBlur = isJoker ? 16 : 8;
-    ctx.fillText(isJoker ? '🃏' : stype.label.split(' ').slice(-1)[0], m.x, m.y - (isJoker ? 46 : 32));
+    const missileIcon = isJoker ? '🃏'
+      : m.specialType === 'sixty_seven' ? '67'
+      : stype.label.split(' ').slice(-1)[0];
+    ctx.fillText(missileIcon, m.x, m.y - (isJoker ? 46 : 32));
     ctx.restore();
   }
 
@@ -2459,6 +2465,53 @@ function drawMissile(m, isQuestioned) {
     ctx.globalAlpha = 0.22;
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(-5, -14, 3, 28);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ── Diagonal gold/white stripes on seven_boom ──
+  if (m.special && m.specialType === 'seven_boom') {
+    ctx.save();
+    ctx.beginPath(); rRect(ctx, -5, -14, 10, 28, 2); ctx.clip();
+    for (let s = -3; s <= 6; s++) {
+      const sy = s * 8;
+      ctx.fillStyle = s % 2 === 0 ? '#ffee44' : '#ffffff';
+      ctx.globalAlpha = 0.75;
+      ctx.beginPath();
+      ctx.moveTo(-5, sy - 4); ctx.lineTo(5, sy - 8);
+      ctx.lineTo(5, sy - 4); ctx.lineTo(-5, sy);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ── Horizontal teal/white stripes on sixty_seven ──
+  if (m.special && m.specialType === 'sixty_seven') {
+    ctx.save();
+    ctx.beginPath(); rRect(ctx, -5, -14, 10, 28, 2); ctx.clip();
+    for (let s = 0; s < 7; s++) {
+      ctx.fillStyle = s % 2 === 0 ? '#00ffcc' : '#ffffff';
+      ctx.globalAlpha = 0.70;
+      ctx.fillRect(-5, -14 + s * 4, 10, 4);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ── Two vertical pink bands on double_shot ──
+  if (m.special && m.specialType === 'double_shot') {
+    ctx.save();
+    ctx.beginPath(); rRect(ctx, -5, -14, 10, 28, 2); ctx.clip();
+    ctx.fillStyle = '#ff66bb';
+    ctx.globalAlpha = 0.70;
+    ctx.fillRect(-5, -14, 4, 28);
+    ctx.fillStyle = '#cc0066';
+    ctx.globalAlpha = 0.70;
+    ctx.fillRect(1, -14, 4, 28);
+    ctx.globalAlpha = 0.20;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-5, -14, 2, 28);
     ctx.globalAlpha = 1;
     ctx.restore();
   }
