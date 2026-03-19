@@ -545,18 +545,30 @@
     /* ── Leaderboard / name-entry modals ── */
     .modal {
       position: absolute; inset: 0;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      background: rgba(0,0,10,0.92);
-      z-index: 200; padding: 24px 20px; gap: 12px; direction: rtl;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,10,0.88);
+      z-index: 200; direction: rtl;
       font-family: 'Rubik', Arial, sans-serif;
     }
     .modal.hidden { display: none; }
-    .modal h3 { font-size: 1.4rem; color: #f0d060; margin: 0; text-align: center; }
-    .modal p  { margin: 0; color: #aaa; font-size: 0.95rem; text-align: center; }
+    .modal-card {
+      background: #0e1428; border: 1px solid #2a3a5a; border-radius: 14px;
+      padding: 20px 18px; width: 320px; max-width: calc(100% - 32px);
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
+      position: relative;
+    }
+    .modal-card h3 { font-size: 1.3rem; color: #f0d060; margin: 0; text-align: center; }
+    .modal-card p  { margin: 0; color: #aaa; font-size: 0.9rem; text-align: center; }
+    #btn-lb-close {
+      position: absolute; top: 8px; left: 8px;
+      background: none; border: none; color: #aaa;
+      font-size: 1.3rem; cursor: pointer; line-height: 1; padding: 6px 10px;
+    }
+    #btn-lb-close:hover { color: #fff; }
     #input-name {
-      font-size: 1.2rem; padding: 8px 14px; border-radius: 8px;
-      border: 2px solid #2ec4b6; background: #0e1428; color: #fff;
-      text-align: center; width: 220px; font-family: inherit;
+      font-size: 1.1rem; padding: 8px 14px; border-radius: 8px;
+      border: 2px solid #2ec4b6; background: #060d1e; color: #fff;
+      text-align: center; width: 200px; font-family: inherit;
     }
     #input-name.error { border-color: #f55; }
     #modal-name-btns { display: flex; gap: 10px; }
@@ -568,24 +580,19 @@
       padding: 8px 16px; border-radius: 8px; border: 1px solid #445;
       background: transparent; color: #aaa; font-size: 0.95rem; cursor: pointer;
     }
-    #lb-tabs { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+    #lb-tabs { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; width: 100%; }
     .lb-tab {
-      padding: 5px 13px; border-radius: 16px; border: 2px solid #334;
-      background: #111; color: #aaa; font-size: 0.9rem; cursor: pointer; font-family: inherit;
+      padding: 5px 11px; border-radius: 16px; border: 2px solid #334;
+      background: #111; color: #aaa; font-size: 0.85rem; cursor: pointer; font-family: inherit;
     }
     .lb-tab.active { border-color: #2ec4b6; color: #2ec4b6; }
-    .lb-table { border-collapse: collapse; width: 100%; font-size: 0.9rem; color: #ddd; }
-    .lb-table th, .lb-table td { padding: 5px 8px; text-align: center; border-bottom: 1px solid #223; }
-    .lb-table th { color: #2ec4b6; font-size: 0.8rem; }
+    .lb-table { border-collapse: collapse; width: 100%; font-size: 0.88rem; color: #ddd; }
+    .lb-table th, .lb-table td { padding: 5px 6px; text-align: center; border-bottom: 1px solid #223; }
+    .lb-table th { color: #2ec4b6; font-size: 0.78rem; }
     .lb-gold   td { color: #ffd700; font-weight: bold; }
     .lb-silver td { color: #c0c0c0; }
     .lb-bronze td { color: #cd7f32; }
-    #lb-table-wrap { width: 100%; max-height: 320px; overflow-y: auto; }
-    #btn-lb-close {
-      align-self: flex-end; background: none; border: none; color: #aaa;
-      font-size: 1.4rem; cursor: pointer; line-height: 1;
-    }
-    #btn-lb-close:hover { color: #fff; }
+    #lb-table-wrap { width: 100%; max-height: 300px; overflow-y: auto; }
     .btn-lb-open {
       background: transparent; border: 1px solid #334; color: #aaa;
       padding: 7px 18px; border-radius: 8px; font-size: 0.9rem; cursor: pointer;
@@ -723,26 +730,30 @@
 
     <!-- Name entry modal -->
     <div id="modal-name" class="modal hidden">
-      <h3>🏆 נכנסת לטבלת המובילים!</h3>
-      <p id="modal-name-rank"></p>
-      <input id="input-name" type="text" maxlength="20" placeholder="שם שלך" dir="rtl" autocomplete="off" />
-      <div id="modal-name-btns">
-        <button id="btn-name-submit">שמור</button>
-        <button id="btn-name-skip">דלג</button>
+      <div class="modal-card">
+        <h3>🏆 נכנסת לטבלת המובילים!</h3>
+        <p id="modal-name-rank"></p>
+        <input id="input-name" type="text" maxlength="20" placeholder="שם שלך" dir="rtl" autocomplete="off" />
+        <div id="modal-name-btns">
+          <button id="btn-name-submit">שמור</button>
+          <button id="btn-name-skip">דלג</button>
+        </div>
       </div>
     </div>
 
     <!-- Leaderboard modal -->
     <div id="modal-lb" class="modal hidden">
-      <button id="btn-lb-close">✕</button>
-      <h3>🏆 טבלת המובילים</h3>
-      <div id="lb-tabs">
-        <button class="lb-tab active" data-diff="1">מתחיל</button>
-        <button class="lb-tab" data-diff="2">מתקדם</button>
-        <button class="lb-tab" data-diff="3">קשה</button>
-        <button class="lb-tab" data-diff="4">טירוף</button>
+      <div class="modal-card">
+        <button id="btn-lb-close">✕</button>
+        <h3>🏆 טבלת המובילים</h3>
+        <div id="lb-tabs">
+          <button class="lb-tab active" data-diff="1">מתחיל</button>
+          <button class="lb-tab" data-diff="2">מתקדם</button>
+          <button class="lb-tab" data-diff="3">קשה</button>
+          <button class="lb-tab" data-diff="4">טירוף</button>
+        </div>
+        <div id="lb-table-wrap"></div>
       </div>
-      <div id="lb-table-wrap"></div>
     </div>
 
   </div>
@@ -3121,6 +3132,10 @@ document.querySelectorAll('.lb-tab').forEach(btn =>
 document.getElementById('btn-lb-close').addEventListener('click', () =>
   document.getElementById('modal-lb').classList.add('hidden')
 );
+document.getElementById('modal-lb').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-lb'))
+    document.getElementById('modal-lb').classList.add('hidden');
+});
 document.getElementById('btn-open-lb').addEventListener('click', () => openLeaderboard(1));
 document.getElementById('btn-gameover-lb').addEventListener('click', () => openLeaderboard(typeof minMathLvl !== 'undefined' ? minMathLvl : 1));
 document.getElementById('btn-win-lb').addEventListener('click', () => openLeaderboard(typeof minMathLvl !== 'undefined' ? minMathLvl : 1));
