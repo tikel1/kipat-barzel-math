@@ -1105,6 +1105,9 @@ function addFloat(text, x, y, col) {
 //  AUDIO
 // ═══════════════════════════════════════════════════════════
 let AC = null;
+const snd67 = new Audio('67.mp3');
+snd67.volume = 0.85;
+function play67() { if (muted) return; snd67.currentTime = 0; snd67.play().catch(() => {}); }
 function unlockAudio() {
   if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
 }
@@ -1518,8 +1521,11 @@ function applySpecialEffect(type, lx) {
       break;
     case 'blast':
     case 'seven_boom':
-    case 'sixty_seven':
     case 'double_shot':
+      giveCard(type);
+      break;
+    case 'sixty_seven':
+      play67();
       giveCard(type);
       break;
     case 'joker':
@@ -1600,6 +1606,7 @@ function activateCardEffect(type) {
       showPowerBanner('7️⃣ שבע בום', '#ffbb00');
       break;
     case 'sixty_seven':
+      play67();
       sixtySevenTimer = 15000;
       regenerateAllMissileQuestions();
       addFloat('🎯 הכל 67!', W / 2, H * 0.38, '#00ccaa');
