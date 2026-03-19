@@ -780,6 +780,25 @@
   </div>
 </div>
 
+<!-- What's New popup -->
+<div id="modal-whatsnew" class="modal hidden" style="z-index:999">
+  <div class="modal-card" style="max-width:340px;gap:10px">
+    <h3 style="font-size:1.2rem">🎉 חדש במשחק!</h3>
+    <div style="width:100%;font-size:0.88rem;color:#ccd;line-height:1.6;text-align:right;direction:rtl">
+      <p style="margin:0 0 8px"><strong style="color:#2ec4b6">🏆 טבלת מובילים</strong><br>
+      כעת ניתן לראות את השחקנים הטובים ביותר בכל רמת קושי.</p>
+      <p style="margin:0 0 4px"><strong style="color:#f0d060">3 טילים מיוחדים חדשים:</strong></p>
+      <p style="margin:0 0 3px">7️⃣ <strong>טיל 7 בום</strong> — תשובות עם הספרה 7 או כפולות של 7</p>
+      <p style="margin:0 0 3px">67 <strong>טיל 67</strong> — כל הטילים מקבלים את התשובה 67</p>
+      <p style="margin:0">🚀🚀 <strong>טיל כפול</strong> — ביירוט מפעיל מיירט נוסף לטיל אקראי</p>
+    </div>
+    <label style="display:flex;align-items:center;gap:7px;font-size:0.8rem;color:#667;cursor:pointer;margin-top:4px;align-self:flex-start">
+      <input type="checkbox" id="whatsnew-dismiss"> אל תציג שוב
+    </label>
+    <button id="btn-whatsnew-close" class="btn-primary" style="width:100%;margin-top:0;padding:9px">הבנתי, בואו נשחק! 🚀</button>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════
 //  CONFIG
@@ -852,6 +871,7 @@ let muted       = false;
 let score       = 0;
 let lives       = 3;
 let wave        = 1;
+let powerupUsage = {};
 let minMathLvl  = 1;
 
 let totalMissiles   = 0;
@@ -1735,6 +1755,7 @@ function useCard(type) {
   updateCardUI();
   activateCardEffect(type);
   track(`card_used_${type}`);
+  powerupUsage[type] = (powerupUsage[type] || 0) + 1;
 }
 
 function updateCardUI() {
@@ -1890,7 +1911,7 @@ function startWave() {
 }
 
 function startNewGame() {
-  score = 0; lives = 3; wave = 1;
+  score = 0; lives = 3; wave = 1; powerupUsage = {};
   missiles = []; interceptors = []; explosions = []; floatTexts = []; shockwaves = [];
   questionedMissile = null;
   damageFlash = 0; hoveredTruck = null;
@@ -1935,9 +1956,10 @@ function endGame(won) {
   track(`game_over_wave${wave}_score${score}_diff${minMathLvl}`);
   if (window.clarity) { clarity('set', 'max_wave', String(wave)); clarity('set', 'final_score', String(score)); }
   const _snapScore = score, _snapWave = wave, _snapDiff = minMathLvl;
+  const _snapTopPowerup = getTopPowerup();
   checkQualifies(_snapScore, _snapDiff).then(({ qualifies, rank }) => {
-    showNameModal(qualifies ? rank : null, _snapScore, _snapWave, _snapDiff);
-  }).catch(() => { showNameModal(null, _snapScore, _snapWave, _snapDiff); });
+    showNameModal(qualifies ? rank : null, _snapScore, _snapWave, _snapDiff, _snapTopPowerup);
+  }).catch(() => { showNameModal(null, _snapScore, _snapWave, _snapDiff, _snapTopPowerup); });
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -3054,14 +3076,25 @@ async function sbFetch(path, opts = {}) {
 }
 
 async function fetchLeaderboard(diff) {
-  return sbFetch(`/rest/v1/scores?difficulty=eq.${diff}&order=score.desc&limit=${LB_SIZE}&select=name,score,wave`);
+  return sbFetch(`/rest/v1/scores?difficulty=eq.${diff}&order=score.desc&limit=${LB_SIZE}&select=name,score,wave,top_powerup`);
 }
 
-async function submitScore(name, scoreVal, waveVal, diff) {
+function getTopPowerup() {
+  let top = null, max = 0;
+  for (const [k, v] of Object.entries(powerupUsage)) { if (v > max) { max = v; top = k; } }
+  return top;
+}
+
+const POWERUP_ICONS = {
+  freeze: '❄️', hint: '💡', swap_question: '🔄', wrong_only: '🚫',
+  restock: '🔋', blast: '💥', seven_boom: '7️⃣', sixty_seven: '67', double_shot: '🚀',
+};
+
+async function submitScore(name, scoreVal, waveVal, diff, topPowerup) {
   return sbFetch('/rest/v1/scores', {
     method: 'POST',
     prefer: 'return=representation',
-    body: JSON.stringify({ name, score: scoreVal, wave: waveVal, difficulty: diff }),
+    body: JSON.stringify({ name, score: scoreVal, wave: waveVal, difficulty: diff, top_powerup: topPowerup || null }),
   });
 }
 
@@ -3077,10 +3110,10 @@ async function checkQualifies(scoreVal, diff) {
   return { qualifies: false };
 }
 
-let _pendingLbScore = null, _pendingLbDiff = null, _pendingLbWave = null, _pendingQualifies = false;
+let _pendingLbScore = null, _pendingLbDiff = null, _pendingLbWave = null, _pendingQualifies = false, _pendingTopPowerup = null;
 
-function showNameModal(rank, scoreVal, waveVal, diff) {
-  _pendingLbScore = scoreVal; _pendingLbDiff = diff; _pendingLbWave = waveVal;
+function showNameModal(rank, scoreVal, waveVal, diff, topPowerup) {
+  _pendingLbScore = scoreVal; _pendingLbDiff = diff; _pendingLbWave = waveVal; _pendingTopPowerup = topPowerup;
   _pendingQualifies = rank !== null;
   const inp = document.getElementById('input-name');
   inp.value = localStorage.getItem('lb_player_name') || '';
@@ -3101,7 +3134,7 @@ document.getElementById('btn-name-submit').addEventListener('click', async () =>
   localStorage.setItem('lb_player_name', name);
   if (window.clarity) clarity('set', 'player_name', name);
   if (_pendingQualifies) {
-    try { await submitScore(name, _pendingLbScore, _pendingLbWave, _pendingLbDiff); } catch (e) {}
+    try { await submitScore(name, _pendingLbScore, _pendingLbWave, _pendingLbDiff, _pendingTopPowerup); } catch (e) {}
   }
 });
 
@@ -3144,9 +3177,12 @@ async function loadLbTab(diff) {
     const cls   = ['lb-gold','lb-silver','lb-bronze'];
     const medal = ['🥇','🥈','🥉'];
     wrap.innerHTML = `<table class="lb-table">
-      <thead><tr><th>#</th><th>שם</th><th>ניקוד</th><th>גל</th></tr></thead>
+      <thead><tr><th>#</th><th>שם</th><th>כוח</th><th>ניקוד</th><th>גל</th></tr></thead>
       <tbody>${rows.map((r,i) => `<tr class="${cls[i]||''}">
-        <td class="lb-rank-col">${medal[i] || i+1}</td><td>${escHtml(r.name)}</td><td>${r.score}</td><td>${r.wave}</td>
+        <td class="lb-rank-col">${medal[i] || i+1}</td>
+        <td>${escHtml(r.name)}</td>
+        <td style="font-size:1.1rem">${r.top_powerup ? (POWERUP_ICONS[r.top_powerup] || '') : ''}</td>
+        <td>${r.score}</td><td>${r.wave}</td>
       </tr>`).join('')}</tbody>
     </table>`;
   } catch (e) {
@@ -3168,6 +3204,17 @@ document.getElementById('modal-lb').addEventListener('click', e => {
 document.getElementById('btn-open-lb').addEventListener('click', () => openLeaderboard(1));
 document.getElementById('btn-gameover-lb').addEventListener('click', () => openLeaderboard(typeof minMathLvl !== 'undefined' ? minMathLvl : 1));
 document.getElementById('btn-win-lb').addEventListener('click', () => openLeaderboard(typeof minMathLvl !== 'undefined' ? minMathLvl : 1));
+
+// ── What's New popup ──
+const WHATSNEW_KEY = 'whatsnew_v2';
+document.getElementById('btn-whatsnew-close').addEventListener('click', () => {
+  if (document.getElementById('whatsnew-dismiss').checked)
+    localStorage.setItem(WHATSNEW_KEY, '1');
+  document.getElementById('modal-whatsnew').classList.add('hidden');
+});
+if (!localStorage.getItem(WHATSNEW_KEY)) {
+  document.getElementById('modal-whatsnew').classList.remove('hidden');
+}
 
 // ═══════════════════════════════════════════════════════════
 //  BOOT
