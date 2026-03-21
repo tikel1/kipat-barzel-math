@@ -2724,7 +2724,9 @@ function drawMissile(m, isQuestioned) {
     ctx.font = 'bold 10px Rubik, Segoe UI, Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillText('▼ יירוט', m.x, m.y - 30);
+    // When special: push יירוט above the power icon so names don't overlap
+    const yiruyY = m.special ? m.y - 52 : m.y - 30;
+    ctx.fillText('▼ יירוט', m.x, yiruyY);
     ctx.globalAlpha = 1;
   }
 }
