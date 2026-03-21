@@ -877,6 +877,8 @@ let minMathLvl  = 1;
 let totalMissiles   = 0;
 let spawned         = 0;
 let resolved        = 0;
+let shotsFired      = 0;
+let shotsCorrect    = 0;
 let spawnTimer      = 0;
 let waveActive      = false;
 let questionStartTime = 0; // for speed-based scoring
@@ -1497,6 +1499,8 @@ function fireTruck(truck) {
 
   // wrong_only reverses the rules: shoot a WRONG answer to intercept, correct = miss
   const hitsTarget = wrongOnlyTimer > 0 ? !truck.correct : truck.correct;
+  shotsFired++;
+  if (hitsTarget) shotsCorrect++;
 
   if (hitsTarget) {
     if (truck.stock <= 0) return;
@@ -1911,7 +1915,7 @@ function startWave() {
 }
 
 function startNewGame() {
-  score = 0; lives = 3; wave = 1; powerupUsage = {};
+  score = 0; lives = 3; wave = 1; powerupUsage = {}; shotsFired = 0; shotsCorrect = 0;
   missiles = []; interceptors = []; explosions = []; floatTexts = []; shockwaves = [];
   questionedMissile = null;
   damageFlash = 0; hoveredTruck = null;
@@ -3048,7 +3052,7 @@ function rRect(ctx, x, y, w, h, r) {
 const SUPABASE_URL  = 'https://wluhwzrgixsmezetlzmx.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_vgh9hdAFf2Bya95-8yhtgg_KIgRLwD5';
 const DIFF_NAMES    = { 1: 'מתחיל', 2: 'מתקדם', 3: 'קשה', 4: 'טירוף' };
-const LB_SIZE       = 15;
+const LB_SIZE       = 10;
 const HEB_PROFANITY = ['זין','כוס','שרמוטה','בן זונה','מזדיין','מניאק',
   'זונה','כוסאמק','נאלח','מפגר','יבניאק','מתחרבן','חרא','זבל','תזדיין'];
 
@@ -3110,6 +3114,9 @@ async function collectMeta() {
     referrer:     document.referrer || null,
     connection:   navigator.connection?.effectiveType || null,
     hw_cores:     navigator.hardwareConcurrency || null,
+    accuracy_pct: shotsFired > 0 ? Math.round(shotsCorrect / shotsFired * 100) : null,
+    shots_fired:  shotsFired,
+    shots_correct: shotsCorrect,
   };
   try {
     const geo = await Promise.race([
