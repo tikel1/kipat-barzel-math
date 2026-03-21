@@ -3081,11 +3081,13 @@ async function sbFetch(path, opts = {}) {
 }
 
 async function fetchLeaderboard(diff) {
+  // hidden=not.is.true → includes rows where hidden is false OR null (old rows before column existed)
+  const base = `difficulty=eq.${diff}&hidden=not.is.true&order=score.desc&limit=${LB_SIZE}`;
   try {
-    return await sbFetch(`/rest/v1/scores?difficulty=eq.${diff}&order=score.desc&limit=${LB_SIZE}&select=name,score,wave,top_powerup`);
+    return await sbFetch(`/rest/v1/scores?${base}&select=name,score,wave,top_powerup`);
   } catch (e) {
     if (e.message && e.message.includes('top_powerup')) {
-      return sbFetch(`/rest/v1/scores?difficulty=eq.${diff}&order=score.desc&limit=${LB_SIZE}&select=name,score,wave`);
+      return sbFetch(`/rest/v1/scores?${base}&select=name,score,wave`);
     }
     throw e;
   }
