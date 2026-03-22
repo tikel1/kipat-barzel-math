@@ -1976,8 +1976,8 @@ function endGame(won) {
       ]);
       // Show rank on the end screen
       const rankEl = document.getElementById(rankElId);
-      if (rank && total) {
-        rankEl.textContent = `מקום ${rank} מתוך ${total} שחקנים ברמה ${DIFF_NAMES[snapDiff]}`;
+      if (rank) {
+        rankEl.textContent = `מקום ${rank} ברמה ${DIFF_NAMES[snapDiff]}`;
       }
       // If player qualifies, show name modal on top of the end screen
       if (qualifies) {
