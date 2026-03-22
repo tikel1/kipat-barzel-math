@@ -1969,21 +1969,29 @@ function endGame(won) {
 
   // Async: save + check leaderboard + get rank — all independent via allSettled
   (async () => {
-    const [saveRes, lbRes, rankRes] = await Promise.allSettled([
-      saveAnonymousScore(playerUUID, snapScore, snapWave, snapDiff, snapTopPowerup),
+    const knownName = localStorage.getItem('lb_player_name') || null;
+    const [, lbRes, rankRes] = await Promise.allSettled([
+      saveScore(playerUUID, snapScore, snapWave, snapDiff, snapTopPowerup),
       checkQualifies(snapScore, snapDiff),
       getPlayerRank(snapScore, snapDiff),
     ]);
-    const savedRowId = saveRes.status === 'fulfilled' ? saveRes.value?.id : null;
     // Update subtitle with rank, or fall back to default text
     const { rank } = rankRes.status === 'fulfilled' ? rankRes.value : {};
     const subtitleEl = document.getElementById(subtitleElId);
     subtitleEl.textContent = rank
       ? `אתם במקום ${rank}... המשיכו להתאמן ונסו שוב!`
       : fallbackSub;
-    // Show name modal if player qualifies for leaderboard
+    // Leaderboard flow
     const { qualifies, rank: lbRank } = lbRes.status === 'fulfilled' ? lbRes.value : {};
-    if (qualifies) showNameModal(lbRank, snapScore, snapWave, snapDiff, snapTopPowerup, playerUUID, savedRowId);
+    if (qualifies) {
+      if (knownName) {
+        // Name already saved — row was stored with name; just open leaderboard
+        openLeaderboard(snapDiff);
+      } else {
+        // First time qualifying — ask for name; on submit it will backfill all past rows
+        showNameModal(lbRank, snapScore, snapWave, snapDiff, snapTopPowerup, playerUUID, null);
+      }
+    }
   })();
 }
 
@@ -3103,16 +3111,26 @@ async function sbFetch(path, opts = {}) {
 }
 
 async function fetchLeaderboard(diff) {
-  // hidden=not.is.true → false or null (old rows); name=not.is.null → named entries only
-  const base = `difficulty=eq.${diff}&hidden=not.is.true&name=not.is.null&order=score.desc&limit=${LB_SIZE}`;
+  // Fetch extra rows to account for same player having multiple entries;
+  // deduplicate client-side keeping best score per player_id (or per name as fallback).
+  const base = `difficulty=eq.${diff}&hidden=not.is.true&name=not.is.null&order=score.desc&limit=${LB_SIZE * 5}`;
+  let rows;
   try {
-    return await sbFetch(`/rest/v1/scores?${base}&select=name,score,wave,top_powerup`);
+    rows = await sbFetch(`/rest/v1/scores?${base}&select=name,score,wave,top_powerup,player_id`);
   } catch (e) {
     if (e.message && e.message.includes('top_powerup')) {
-      return sbFetch(`/rest/v1/scores?${base}&select=name,score,wave`);
-    }
-    throw e;
+      rows = await sbFetch(`/rest/v1/scores?${base}&select=name,score,wave,player_id`);
+    } else { throw e; }
   }
+  if (!rows) return rows;
+  // Deduplicate: keep only the highest-score row per player (player_id, fallback to name)
+  const seen = new Set();
+  const deduped = [];
+  for (const row of rows) {
+    const key = row.player_id || row.name;
+    if (!seen.has(key)) { seen.add(key); deduped.push(row); }
+  }
+  return deduped.slice(0, LB_SIZE);
 }
 
 function getTopPowerup() {
@@ -3170,14 +3188,15 @@ function getOrCreatePlayerUUID() {
   return id;
 }
 
-// Save anonymous session (name=null). Returns the saved row.
-async function saveAnonymousScore(playerUUID, scoreVal, waveVal, diff, topPowerup) {
+// Save session score. Uses saved name if player already identified; null otherwise.
+async function saveScore(playerUUID, scoreVal, waveVal, diff, topPowerup) {
+  const savedName = localStorage.getItem('lb_player_name') || null;
   const meta = await collectMeta();
   const rows = await sbFetch('/rest/v1/scores', {
     method: 'POST',
     prefer: 'return=representation',
     body: JSON.stringify({
-      name: null,
+      name: savedName,
       score: scoreVal, wave: waveVal, difficulty: diff,
       top_powerup: topPowerup || null,
       player_id: playerUUID,
@@ -3187,11 +3206,11 @@ async function saveAnonymousScore(playerUUID, scoreVal, waveVal, diff, topPoweru
   return rows?.[0] || null;
 }
 
-// PATCH name onto only the current session's row (by id), to avoid past sessions
-// appearing as duplicates in the leaderboard
-async function patchPlayerName(rowId, name) {
-  if (!rowId || !name) return;
-  return sbFetch(`/rest/v1/scores?id=eq.${rowId}`, {
+// PATCH name onto ALL anonymous (null-name) rows for this player — retroactive backfill.
+// Safe because fetchLeaderboard deduplicates by player_id, so only the best score shows.
+async function patchPlayerName(playerUUID, name) {
+  if (!playerUUID || !name) return;
+  return sbFetch(`/rest/v1/scores?player_id=eq.${encodeURIComponent(playerUUID)}&name=is.null`, {
     method: 'PATCH',
     body: JSON.stringify({ name }),
   });
@@ -3225,7 +3244,6 @@ const _nameModal = document.getElementById('modal-name');
 function showNameModal(rank, scoreVal, waveVal, diff, topPowerup, playerUUID, rowId) {
   _nameModal.dataset.diff       = diff;
   _nameModal.dataset.playerUUID = playerUUID || '';
-  _nameModal.dataset.rowId      = rowId || '';
   const inp = document.getElementById('input-name');
   inp.value = localStorage.getItem('lb_player_name') || '';
   inp.classList.remove('error');
@@ -3241,12 +3259,12 @@ document.getElementById('btn-name-submit').addEventListener('click', async () =>
   const name       = sanitizeName(inp.value);
   const diff       = Number(_nameModal.dataset.diff);
   const playerUUID = _nameModal.dataset.playerUUID || null;
-  const rowId      = _nameModal.dataset.rowId      || null;
   _nameModal.classList.add('hidden');
   if (!name) return;
   localStorage.setItem('lb_player_name', name);
   if (window.clarity) clarity('set', 'player_name', name);
-  try { await patchPlayerName(rowId, name); } catch (_) {}
+  // Backfill ALL past anonymous rows for this player — safe because leaderboard deduplicates by player_id
+  try { await patchPlayerName(playerUUID, name); } catch (_) {}
   // Open leaderboard at player's difficulty so they can see their entry
   openLeaderboard(diff);
 });
