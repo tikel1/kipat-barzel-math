@@ -735,9 +735,8 @@
     <!-- Game over screen -->
     <div class="screen hidden" id="screen-gameover">
       <h2 class="lose">המשחק נגמר</h2>
-      <p>הטילים עברו... המשיכו להתאמן ונסו שוב!</p>
+      <p id="gameover-subtitle"><span class="rank-loading">…</span></p>
       <div class="final-score" id="gameover-score">ניקוד: 0</div>
-      <div class="end-rank" id="gameover-rank"><span class="rank-loading">…</span></div>
       <button class="btn-primary" id="btn-replay">↺  נסה שוב</button>
       <button id="btn-gameover-menu">☰  תפריט ראשי</button>
       <button class="btn-lb-open" id="btn-gameover-lb">🏆  טבלת מובילים</button>
@@ -746,9 +745,8 @@
     <!-- Win screen (kept for future use) -->
     <div class="screen hidden" id="screen-win">
       <h2 class="win">🏆 העיר ניצלה!</h2>
-      <p>מדהים! הגנתם על העיר!</p>
+      <p id="win-subtitle"><span class="rank-loading">…</span></p>
       <div class="final-score" id="win-score">ניקוד: 0</div>
-      <div class="end-rank" id="win-rank"><span class="rank-loading">…</span></div>
       <button class="btn-primary" id="btn-replay-win">↺  שחק שוב</button>
       <button class="btn-lb-open" id="btn-win-lb">🏆  טבלת מובילים</button>
     </div>
@@ -1958,28 +1956,30 @@ function endGame(won) {
   const snapTopPowerup = getTopPowerup();
   const playerUUID = getOrCreatePlayerUUID();
 
-  // Show end screen immediately with score; rank fills in async below
-  const scoreElId = won ? 'win-score'   : 'gameover-score';
-  const rankElId  = won ? 'win-rank'    : 'gameover-rank';
-  document.getElementById(scoreElId).textContent = `ניקוד: ${snapScore}`;
-  document.getElementById(rankElId).innerHTML    = '<span class="rank-loading">…</span>';
+  // Show end screen with score; subtitle starts as loading dots, fills in async
+  const scoreElId    = won ? 'win-score'     : 'gameover-score';
+  const subtitleElId = won ? 'win-subtitle'  : 'gameover-subtitle';
+  const fallbackSub  = won ? 'מדהים! הגנתם על העיר!' : 'הטילים עברו... המשיכו להתאמן ונסו שוב!';
+  document.getElementById(scoreElId).textContent    = `ניקוד: ${snapScore}`;
+  document.getElementById(subtitleElId).innerHTML  = '<span class="rank-loading">…</span>';
   showScreen(won ? 'win' : 'gameover');
 
   track(`game_over_wave${snapWave}_score${snapScore}_diff${snapDiff}`);
   if (window.clarity) { clarity('set', 'max_wave', String(snapWave)); clarity('set', 'final_score', String(snapScore)); }
 
-  // Async: save anonymous score + check leaderboard + get global rank — all in parallel
-  // Use allSettled so a failed save doesn't block rank/subtitle update
+  // Async: save + check leaderboard + get rank — all independent via allSettled
   (async () => {
     const [, lbRes, rankRes] = await Promise.allSettled([
       saveAnonymousScore(playerUUID, snapScore, snapWave, snapDiff, snapTopPowerup),
       checkQualifies(snapScore, snapDiff),
       getPlayerRank(snapScore, snapDiff),
     ]);
-    // Update rank element (independent of save success)
+    // Update subtitle with rank, or fall back to default text
     const { rank } = rankRes.status === 'fulfilled' ? rankRes.value : {};
-    const rankEl = document.getElementById(rankElId);
-    rankEl.textContent = rank ? `מקום ${rank} ברמה ${DIFF_NAMES[snapDiff]}` : '';
+    const subtitleEl = document.getElementById(subtitleElId);
+    subtitleEl.textContent = rank
+      ? `אתם במקום ${rank}... המשיכו להתאמן ונסו שוב!`
+      : fallbackSub;
     // Show name modal if player qualifies for leaderboard
     const { qualifies, rank: lbRank } = lbRes.status === 'fulfilled' ? lbRes.value : {};
     if (qualifies) showNameModal(lbRank, snapScore, snapWave, snapDiff, snapTopPowerup, playerUUID);
@@ -3202,8 +3202,8 @@ async function getPlayerRank(scoreVal, diff) {
       sbFetch(`/rest/v1/scores?select=count()&difficulty=eq.${diff}&score=gt.${scoreVal}&hidden=not.is.true`),
       sbFetch(`/rest/v1/scores?select=count()&difficulty=eq.${diff}&hidden=not.is.true`),
     ]);
-    const rank  = (aboveRes?.[0]?.count ?? 0) + 1;
-    const total = totalRes?.[0]?.count ?? 0;
+    const rank  = Number(aboveRes?.[0]?.count ?? 0) + 1;
+    const total = Number(totalRes?.[0]?.count ?? 0);
     return { rank, total };
   } catch (_) { return { rank: null, total: null }; }
 }
