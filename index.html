@@ -1967,23 +1967,20 @@ function endGame(won) {
   if (window.clarity) { clarity('set', 'max_wave', String(snapWave)); clarity('set', 'final_score', String(snapScore)); }
 
   // Async: save anonymous score + check leaderboard + get global rank — all in parallel
+  // Use allSettled so a failed save doesn't block rank display
   (async () => {
-    try {
-      const [, { qualifies, rank: lbRank }, { rank, total }] = await Promise.all([
-        saveAnonymousScore(playerUUID, snapScore, snapWave, snapDiff, snapTopPowerup),
-        checkQualifies(snapScore, snapDiff),
-        getPlayerRank(snapScore, snapDiff),
-      ]);
-      // Show rank on the end screen
-      const rankEl = document.getElementById(rankElId);
-      if (rank) {
-        rankEl.textContent = `מקום ${rank} ברמה ${DIFF_NAMES[snapDiff]}`;
-      }
-      // If player qualifies, show name modal on top of the end screen
-      if (qualifies) {
-        showNameModal(lbRank, snapScore, snapWave, snapDiff, snapTopPowerup, playerUUID);
-      }
-    } catch (_) { /* silently ignore — end screen already visible */ }
+    const [, lbRes, rankRes] = await Promise.allSettled([
+      saveAnonymousScore(playerUUID, snapScore, snapWave, snapDiff, snapTopPowerup),
+      checkQualifies(snapScore, snapDiff),
+      getPlayerRank(snapScore, snapDiff),
+    ]);
+    // Show rank on the end screen (independent of save success)
+    const { rank } = rankRes.status === 'fulfilled' ? rankRes.value : {};
+    const rankEl = document.getElementById(rankElId);
+    if (rank) rankEl.textContent = `מקום ${rank} ברמה ${DIFF_NAMES[snapDiff]}`;
+    // Show name modal if player qualifies for leaderboard
+    const { qualifies, rank: lbRank } = lbRes.status === 'fulfilled' ? lbRes.value : {};
+    if (qualifies) showNameModal(lbRank, snapScore, snapWave, snapDiff, snapTopPowerup, playerUUID);
   })();
 }
 
