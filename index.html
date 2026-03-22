@@ -1969,11 +1969,12 @@ function endGame(won) {
 
   // Async: save + check leaderboard + get rank — all independent via allSettled
   (async () => {
-    const [, lbRes, rankRes] = await Promise.allSettled([
+    const [saveRes, lbRes, rankRes] = await Promise.allSettled([
       saveAnonymousScore(playerUUID, snapScore, snapWave, snapDiff, snapTopPowerup),
       checkQualifies(snapScore, snapDiff),
       getPlayerRank(snapScore, snapDiff),
     ]);
+    const savedRowId = saveRes.status === 'fulfilled' ? saveRes.value?.id : null;
     // Update subtitle with rank, or fall back to default text
     const { rank } = rankRes.status === 'fulfilled' ? rankRes.value : {};
     const subtitleEl = document.getElementById(subtitleElId);
@@ -1982,7 +1983,7 @@ function endGame(won) {
       : fallbackSub;
     // Show name modal if player qualifies for leaderboard
     const { qualifies, rank: lbRank } = lbRes.status === 'fulfilled' ? lbRes.value : {};
-    if (qualifies) showNameModal(lbRank, snapScore, snapWave, snapDiff, snapTopPowerup, playerUUID);
+    if (qualifies) showNameModal(lbRank, snapScore, snapWave, snapDiff, snapTopPowerup, playerUUID, savedRowId);
   })();
 }
 
@@ -3186,10 +3187,11 @@ async function saveAnonymousScore(playerUUID, scoreVal, waveVal, diff, topPoweru
   return rows?.[0] || null;
 }
 
-// PATCH name onto all anonymous (null-name) rows for this player_id
-async function patchPlayerName(playerUUID, name) {
-  if (!playerUUID || !name) return;
-  return sbFetch(`/rest/v1/scores?player_id=eq.${encodeURIComponent(playerUUID)}&name=is.null`, {
+// PATCH name onto only the current session's row (by id), to avoid past sessions
+// appearing as duplicates in the leaderboard
+async function patchPlayerName(rowId, name) {
+  if (!rowId || !name) return;
+  return sbFetch(`/rest/v1/scores?id=eq.${rowId}`, {
     method: 'PATCH',
     body: JSON.stringify({ name }),
   });
@@ -3220,9 +3222,10 @@ async function checkQualifies(scoreVal, diff) {
 // Session data stored on the modal element to avoid stale globals
 const _nameModal = document.getElementById('modal-name');
 
-function showNameModal(rank, scoreVal, waveVal, diff, topPowerup, playerUUID) {
+function showNameModal(rank, scoreVal, waveVal, diff, topPowerup, playerUUID, rowId) {
   _nameModal.dataset.diff       = diff;
   _nameModal.dataset.playerUUID = playerUUID || '';
+  _nameModal.dataset.rowId      = rowId || '';
   const inp = document.getElementById('input-name');
   inp.value = localStorage.getItem('lb_player_name') || '';
   inp.classList.remove('error');
@@ -3238,12 +3241,12 @@ document.getElementById('btn-name-submit').addEventListener('click', async () =>
   const name       = sanitizeName(inp.value);
   const diff       = Number(_nameModal.dataset.diff);
   const playerUUID = _nameModal.dataset.playerUUID || null;
+  const rowId      = _nameModal.dataset.rowId      || null;
   _nameModal.classList.add('hidden');
   if (!name) return;
   localStorage.setItem('lb_player_name', name);
   if (window.clarity) clarity('set', 'player_name', name);
-  // Update all anonymous rows (this session and past ones) with the player's name
-  try { await patchPlayerName(playerUUID, name); } catch (_) {}
+  try { await patchPlayerName(rowId, name); } catch (_) {}
   // Open leaderboard at player's difficulty so they can see their entry
   openLeaderboard(diff);
 });
