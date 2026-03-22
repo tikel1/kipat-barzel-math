@@ -3195,17 +3195,14 @@ async function patchPlayerName(playerUUID, name) {
   });
 }
 
-// Count scores above mine to determine rank & total among all players for this difficulty
+// Count scores above mine to determine rank — fetch IDs only and count client-side
 async function getPlayerRank(scoreVal, diff) {
   try {
-    const [aboveRes, totalRes] = await Promise.all([
-      sbFetch(`/rest/v1/scores?select=count()&difficulty=eq.${diff}&score=gt.${scoreVal}&hidden=not.is.true`),
-      sbFetch(`/rest/v1/scores?select=count()&difficulty=eq.${diff}&hidden=not.is.true`),
-    ]);
-    const rank  = Number(aboveRes?.[0]?.count ?? 0) + 1;
-    const total = Number(totalRes?.[0]?.count ?? 0);
-    return { rank, total };
-  } catch (_) { return { rank: null, total: null }; }
+    const above = await sbFetch(
+      `/rest/v1/scores?select=id&difficulty=eq.${diff}&score=gt.${scoreVal}&hidden=not.is.true`
+    );
+    return { rank: (above?.length ?? 0) + 1 };
+  } catch (_) { return { rank: null }; }
 }
 
 async function checkQualifies(scoreVal, diff) {
