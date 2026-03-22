@@ -488,6 +488,7 @@
       line-height: 1.58;
     }
     .final-score { font-size: 1.65rem; font-weight: 700; color: #ffd700; }
+    .end-rank { font-size: 0.95rem; color: #00d4ff; min-height: 1.2em; margin-top: 2px; }
 
     .diff-label {
       font-size: 0.7rem;
@@ -734,6 +735,7 @@
       <h2 class="lose">המשחק נגמר</h2>
       <p>הטילים עברו... המשיכו להתאמן ונסו שוב!</p>
       <div class="final-score" id="gameover-score">ניקוד: 0</div>
+      <div class="end-rank" id="gameover-rank"></div>
       <button class="btn-primary" id="btn-replay">↺  נסה שוב</button>
       <button id="btn-gameover-menu">☰  תפריט ראשי</button>
       <button class="btn-lb-open" id="btn-gameover-lb">🏆  טבלת מובילים</button>
@@ -744,6 +746,7 @@
       <h2 class="win">🏆 העיר ניצלה!</h2>
       <p>מדהים! הגנתם על העיר!</p>
       <div class="final-score" id="win-score">ניקוד: 0</div>
+      <div class="end-rank" id="win-rank"></div>
       <button class="btn-primary" id="btn-replay-win">↺  שחק שוב</button>
       <button class="btn-lb-open" id="btn-win-lb">🏆  טבלת מובילים</button>
     </div>
@@ -1949,20 +1952,39 @@ function endGame(won) {
   // Hide HUD overlays
   document.getElementById('laser-btn-wrap').style.display = 'none';
   document.getElementById('card-slots').style.display    = 'none';
-  if (won) {
-    document.getElementById('win-score').textContent = `ניקוד: ${score}`;
-    showScreen('win');
-  } else {
-    document.getElementById('gameover-score').textContent = `ניקוד: ${score}`;
-    showScreen('gameover');
-  }
-  track(`game_over_wave${wave}_score${score}_diff${minMathLvl}`);
-  if (window.clarity) { clarity('set', 'max_wave', String(wave)); clarity('set', 'final_score', String(score)); }
-  const _snapScore = score, _snapWave = wave, _snapDiff = minMathLvl;
-  const _snapTopPowerup = getTopPowerup();
-  checkQualifies(_snapScore, _snapDiff).then(({ qualifies, rank }) => {
-    showNameModal(qualifies ? rank : null, _snapScore, _snapWave, _snapDiff, _snapTopPowerup);
-  }).catch(() => { showNameModal(null, _snapScore, _snapWave, _snapDiff, _snapTopPowerup); });
+  const snapScore = score, snapWave = wave, snapDiff = minMathLvl;
+  const snapTopPowerup = getTopPowerup();
+  const playerUUID = getOrCreatePlayerUUID();
+
+  // Show end screen immediately with score; rank fills in async
+  const scoreElId = won ? 'win-score' : 'gameover-score';
+  const rankElId  = won ? 'win-rank'  : 'gameover-rank';
+  document.getElementById(scoreElId).textContent = `ניקוד: ${snapScore}`;
+  document.getElementById(rankElId).textContent  = '';
+  showScreen(won ? 'win' : 'gameover');
+
+  track(`game_over_wave${snapWave}_score${snapScore}_diff${snapDiff}`);
+  if (window.clarity) { clarity('set', 'max_wave', String(snapWave)); clarity('set', 'final_score', String(snapScore)); }
+
+  // Async: save anonymous score + check leaderboard + get global rank — all in parallel
+  (async () => {
+    try {
+      const [, { qualifies, rank: lbRank }, { rank, total }] = await Promise.all([
+        saveAnonymousScore(playerUUID, snapScore, snapWave, snapDiff, snapTopPowerup),
+        checkQualifies(snapScore, snapDiff),
+        getPlayerRank(snapScore, snapDiff),
+      ]);
+      // Show rank on the end screen
+      const rankEl = document.getElementById(rankElId);
+      if (rank && total) {
+        rankEl.textContent = `מקום ${rank} מתוך ${total} שחקנים ברמה ${DIFF_NAMES[snapDiff]}`;
+      }
+      // If player qualifies, show name modal on top of the end screen
+      if (qualifies) {
+        showNameModal(lbRank, snapScore, snapWave, snapDiff, snapTopPowerup, playerUUID);
+      }
+    } catch (_) { /* silently ignore — end screen already visible */ }
+  })();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -3081,8 +3103,8 @@ async function sbFetch(path, opts = {}) {
 }
 
 async function fetchLeaderboard(diff) {
-  // hidden=not.is.true → includes rows where hidden is false OR null (old rows before column existed)
-  const base = `difficulty=eq.${diff}&hidden=not.is.true&order=score.desc&limit=${LB_SIZE}`;
+  // hidden=not.is.true → false or null (old rows); name=not.is.null → named entries only
+  const base = `difficulty=eq.${diff}&hidden=not.is.true&name=not.is.null&order=score.desc&limit=${LB_SIZE}`;
   try {
     return await sbFetch(`/rest/v1/scores?${base}&select=name,score,wave,top_powerup`);
   } catch (e) {
@@ -3134,13 +3156,57 @@ async function collectMeta() {
   return meta;
 }
 
-async function submitScore(name, scoreVal, waveVal, diff, topPowerup) {
+// ── Player UUID (persisted in localStorage) ──────────────────────────────────
+function getOrCreatePlayerUUID() {
+  let id = localStorage.getItem('player_uuid');
+  if (!id) {
+    id = (crypto.randomUUID?.() ||
+      'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      }));
+    localStorage.setItem('player_uuid', id);
+  }
+  return id;
+}
+
+// Save anonymous session (name=null). Returns the saved row.
+async function saveAnonymousScore(playerUUID, scoreVal, waveVal, diff, topPowerup) {
   const meta = await collectMeta();
-  return sbFetch('/rest/v1/scores', {
+  const rows = await sbFetch('/rest/v1/scores', {
     method: 'POST',
     prefer: 'return=representation',
-    body: JSON.stringify({ name, score: scoreVal, wave: waveVal, difficulty: diff, top_powerup: topPowerup || null, meta }),
+    body: JSON.stringify({
+      name: null,
+      score: scoreVal, wave: waveVal, difficulty: diff,
+      top_powerup: topPowerup || null,
+      player_id: playerUUID,
+      meta,
+    }),
   });
+  return rows?.[0] || null;
+}
+
+// PATCH name onto all anonymous (null-name) rows for this player_id
+async function patchPlayerName(playerUUID, name) {
+  if (!playerUUID || !name) return;
+  return sbFetch(`/rest/v1/scores?player_id=eq.${encodeURIComponent(playerUUID)}&name=is.null`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+}
+
+// Count scores above mine to determine rank & total among all players for this difficulty
+async function getPlayerRank(scoreVal, diff) {
+  try {
+    const [aboveRes, totalRes] = await Promise.all([
+      sbFetch(`/rest/v1/scores?select=count()&difficulty=eq.${diff}&score=gt.${scoreVal}&hidden=not.is.true`),
+      sbFetch(`/rest/v1/scores?select=count()&difficulty=eq.${diff}&hidden=not.is.true`),
+    ]);
+    const rank  = (aboveRes?.[0]?.count ?? 0) + 1;
+    const total = totalRes?.[0]?.count ?? 0;
+    return { rank, total };
+  } catch (_) { return { rank: null, total: null }; }
 }
 
 async function checkQualifies(scoreVal, diff) {
@@ -3155,42 +3221,35 @@ async function checkQualifies(scoreVal, diff) {
   return { qualifies: false };
 }
 
-// Session data stored on the modal element to avoid stale globals if player
-// starts a new game before submitting the name from the previous session.
+// Session data stored on the modal element to avoid stale globals
 const _nameModal = document.getElementById('modal-name');
 
-function showNameModal(rank, scoreVal, waveVal, diff, topPowerup) {
-  _nameModal.dataset.score      = scoreVal;
-  _nameModal.dataset.wave       = waveVal;
+function showNameModal(rank, scoreVal, waveVal, diff, topPowerup, playerUUID) {
   _nameModal.dataset.diff       = diff;
-  _nameModal.dataset.topPowerup = topPowerup || '';
-  _nameModal.dataset.qualifies  = rank !== null ? '1' : '';
+  _nameModal.dataset.playerUUID = playerUUID || '';
   const inp = document.getElementById('input-name');
   inp.value = localStorage.getItem('lb_player_name') || '';
   inp.classList.remove('error');
-  document.getElementById('modal-name-title').textContent =
-    rank !== null ? '🏆 נכנסת לטבלת המובילים!' : '📊 סיום משחק';
+  document.getElementById('modal-name-title').textContent = '🏆 נכנסת לטבלת המובילים!';
   const rankEl = document.getElementById('modal-name-rank');
-  rankEl.textContent = rank !== null ? `מקום ${rank} ברמה ${DIFF_NAMES[diff]}` : '';
-  rankEl.style.display = rank !== null ? '' : 'none';
+  rankEl.textContent = `מקום ${rank} ברמה ${DIFF_NAMES[diff]}`;
+  rankEl.style.display = '';
   _nameModal.classList.remove('hidden');
 }
 
 document.getElementById('btn-name-submit').addEventListener('click', async () => {
-  const inp       = document.getElementById('input-name');
-  const name      = sanitizeName(inp.value);
-  const scoreVal  = Number(_nameModal.dataset.score);
-  const waveVal   = Number(_nameModal.dataset.wave);
-  const diff      = Number(_nameModal.dataset.diff);
-  const topPowerup = _nameModal.dataset.topPowerup || null;
-  const qualifies = _nameModal.dataset.qualifies === '1';
+  const inp        = document.getElementById('input-name');
+  const name       = sanitizeName(inp.value);
+  const diff       = Number(_nameModal.dataset.diff);
+  const playerUUID = _nameModal.dataset.playerUUID || null;
   _nameModal.classList.add('hidden');
   if (!name) return;
   localStorage.setItem('lb_player_name', name);
   if (window.clarity) clarity('set', 'player_name', name);
-  if (qualifies) {
-    try { await submitScore(name, scoreVal, waveVal, diff, topPowerup); } catch (e) {}
-  }
+  // Update all anonymous rows (this session and past ones) with the player's name
+  try { await patchPlayerName(playerUUID, name); } catch (_) {}
+  // Open leaderboard at player's difficulty so they can see their entry
+  openLeaderboard(diff);
 });
 
 document.getElementById('btn-name-skip').addEventListener('click', () => {
