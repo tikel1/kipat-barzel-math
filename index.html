@@ -881,6 +881,7 @@ let spawned         = 0;
 let resolved        = 0;
 let shotsFired      = 0;
 let shotsCorrect    = 0;
+let gameStartTime   = 0;
 let spawnTimer      = 0;
 let waveActive      = false;
 let questionStartTime = 0; // for speed-based scoring
@@ -1917,7 +1918,7 @@ function startWave() {
 }
 
 function startNewGame() {
-  score = 0; lives = 3; wave = 1; powerupUsage = {}; shotsFired = 0; shotsCorrect = 0;
+  score = 0; lives = 3; wave = 1; powerupUsage = {}; shotsFired = 0; shotsCorrect = 0; gameStartTime = Date.now();
   missiles = []; interceptors = []; explosions = []; floatTexts = []; shockwaves = [];
   questionedMissile = null;
   damageFlash = 0; hoveredTruck = null;
@@ -3148,17 +3149,48 @@ async function collectMeta() {
   const ua = navigator.userAgent;
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
   const isTablet = /iPad|Tablet/i.test(ua) || (isMobile && Math.min(screen.width, screen.height) > 600);
+
+  // Parse browser name + version from UA
+  const browserMatch = ua.match(/(Chrome|Firefox|Safari|Edge|OPR|Opera)\/(\d+)/);
+  const browser = browserMatch ? `${browserMatch[1]} ${browserMatch[2]}` : null;
+
+  // Parse OS name + version
+  const osMatch = ua.match(/(Windows NT [\d.]+|Mac OS X [\d_]+|Android [\d.]+|iPhone OS [\d_]+|Linux)/);
+  const osRaw   = osMatch ? osMatch[1] : null;
+  const os      = osRaw
+    ?.replace('Windows NT 10.0', 'Windows 11/10')
+    ?.replace('Windows NT 6.3',  'Windows 8.1')
+    ?.replace('Windows NT 6.1',  'Windows 7')
+    ?.replace(/_/g, '.') || null;
+
+  // Parse mobile device model from UA
+  const modelMatch = ua.match(/\(([^)]+)\)/);
+  const modelStr   = modelMatch ? modelMatch[1] : '';
+  const deviceModel = isMobile
+    ? (modelStr.match(/iPhone|iPad|Samsung|Pixel|Xiaomi|Huawei|OnePlus|Redmi|OPPO|Vivo/i)?.[0] || null)
+    : null;
+
   const meta = {
-    user_agent:   ua,
-    language:     navigator.language,
-    timezone:     Intl.DateTimeFormat().resolvedOptions().timeZone,
-    screen:       `${screen.width}x${screen.height}@${window.devicePixelRatio}x`,
-    device_type:  isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop',
-    referrer:     document.referrer || null,
-    connection:   navigator.connection?.effectiveType || null,
-    hw_cores:     navigator.hardwareConcurrency || null,
-    accuracy_pct: shotsFired > 0 ? Math.round(shotsCorrect / shotsFired * 100) : null,
-    shots_fired:  shotsFired,
+    user_agent:    ua,
+    browser,
+    os,
+    device_model:  deviceModel,
+    language:      navigator.language,
+    timezone:      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    screen:        `${screen.width}x${screen.height}@${window.devicePixelRatio}x`,
+    viewport:      `${window.innerWidth}x${window.innerHeight}`,
+    color_depth:   screen.colorDepth || null,
+    device_type:   isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop',
+    touch_points:  navigator.maxTouchPoints || 0,
+    ram_gb:        navigator.deviceMemory   || null,
+    hw_cores:      navigator.hardwareConcurrency || null,
+    connection:    navigator.connection?.effectiveType || null,
+    bandwidth_mbps: navigator.connection?.downlink    || null,
+    data_saver:    navigator.connection?.saveData     || false,
+    referrer:      document.referrer || null,
+    session_duration_s: gameStartTime ? Math.round((Date.now() - gameStartTime) / 1000) : null,
+    accuracy_pct:  shotsFired > 0 ? Math.round(shotsCorrect / shotsFired * 100) : null,
+    shots_fired:   shotsFired,
     shots_correct: shotsCorrect,
   };
   try {
