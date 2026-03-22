@@ -489,6 +489,8 @@
     }
     .final-score { font-size: 1.65rem; font-weight: 700; color: #ffd700; }
     .end-rank { font-size: 0.95rem; color: #00d4ff; min-height: 1.2em; margin-top: 2px; }
+    .rank-loading { opacity: 0.4; animation: rankPulse 1s ease-in-out infinite; }
+    @keyframes rankPulse { 0%,100%{ opacity:0.2 } 50%{ opacity:0.6 } }
 
     .diff-label {
       font-size: 0.7rem;
@@ -733,8 +735,9 @@
     <!-- Game over screen -->
     <div class="screen hidden" id="screen-gameover">
       <h2 class="lose">המשחק נגמר</h2>
-      <p id="gameover-subtitle">הטילים עברו... המשיכו להתאמן ונסו שוב!</p>
+      <p>הטילים עברו... המשיכו להתאמן ונסו שוב!</p>
       <div class="final-score" id="gameover-score">ניקוד: 0</div>
+      <div class="end-rank" id="gameover-rank"><span class="rank-loading">…</span></div>
       <button class="btn-primary" id="btn-replay">↺  נסה שוב</button>
       <button id="btn-gameover-menu">☰  תפריט ראשי</button>
       <button class="btn-lb-open" id="btn-gameover-lb">🏆  טבלת מובילים</button>
@@ -743,8 +746,9 @@
     <!-- Win screen (kept for future use) -->
     <div class="screen hidden" id="screen-win">
       <h2 class="win">🏆 העיר ניצלה!</h2>
-      <p id="win-subtitle">מדהים! הגנתם על העיר!</p>
+      <p>מדהים! הגנתם על העיר!</p>
       <div class="final-score" id="win-score">ניקוד: 0</div>
+      <div class="end-rank" id="win-rank"><span class="rank-loading">…</span></div>
       <button class="btn-primary" id="btn-replay-win">↺  שחק שוב</button>
       <button class="btn-lb-open" id="btn-win-lb">🏆  טבלת מובילים</button>
     </div>
@@ -1954,12 +1958,11 @@ function endGame(won) {
   const snapTopPowerup = getTopPowerup();
   const playerUUID = getOrCreatePlayerUUID();
 
-  // Show end screen immediately with score; subtitle updates async with rank
-  const scoreElId    = won ? 'win-score'      : 'gameover-score';
-  const subtitleElId = won ? 'win-subtitle'   : 'gameover-subtitle';
-  const defaultSub   = won ? 'מדהים! הגנתם על העיר!' : 'הטילים עברו... המשיכו להתאמן ונסו שוב!';
-  document.getElementById(scoreElId).textContent    = `ניקוד: ${snapScore}`;
-  document.getElementById(subtitleElId).textContent = defaultSub;
+  // Show end screen immediately with score; rank fills in async below
+  const scoreElId = won ? 'win-score'   : 'gameover-score';
+  const rankElId  = won ? 'win-rank'    : 'gameover-rank';
+  document.getElementById(scoreElId).textContent = `ניקוד: ${snapScore}`;
+  document.getElementById(rankElId).innerHTML    = '<span class="rank-loading">…</span>';
   showScreen(won ? 'win' : 'gameover');
 
   track(`game_over_wave${snapWave}_score${snapScore}_diff${snapDiff}`);
@@ -1973,14 +1976,10 @@ function endGame(won) {
       checkQualifies(snapScore, snapDiff),
       getPlayerRank(snapScore, snapDiff),
     ]);
-    // Update subtitle with rank (independent of save success)
+    // Update rank element (independent of save success)
     const { rank } = rankRes.status === 'fulfilled' ? rankRes.value : {};
-    const subtitleEl = document.getElementById(subtitleElId);
-    if (rank) {
-      subtitleEl.textContent = won
-        ? `הגעתם למקום ${rank} ברמה ${DIFF_NAMES[snapDiff]}! מדהים!`
-        : `הגעתם למקום ${rank} ברמה ${DIFF_NAMES[snapDiff]}... המשיכו להתאמן ונסו שוב!`;
-    }
+    const rankEl = document.getElementById(rankElId);
+    rankEl.textContent = rank ? `מקום ${rank} ברמה ${DIFF_NAMES[snapDiff]}` : '';
     // Show name modal if player qualifies for leaderboard
     const { qualifies, rank: lbRank } = lbRes.status === 'fulfilled' ? lbRes.value : {};
     if (qualifies) showNameModal(lbRank, snapScore, snapWave, snapDiff, snapTopPowerup, playerUUID);
